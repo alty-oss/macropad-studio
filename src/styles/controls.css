@@ -1,0 +1,41 @@
+/* Botões e campos */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-elevated); color: var(--text); font-weight: 600; white-space: nowrap; transition: background var(--fast), border-color var(--fast); }
+.btn:hover:not(:disabled) { background: var(--bg-hover); }
+.btn:disabled { opacity: .45; }
+.btn-primary { border-color: transparent; background: var(--accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+.btn-primary:disabled { border-color: var(--border-subtle); background: var(--bg-elevated); color: var(--text-faint); opacity: 1; }
+.btn-icon { width: 32px; padding: 0; border-color: transparent; background: transparent; color: var(--text-secondary); }
+.btn-icon:hover:not(:disabled) { color: var(--text); }
+.btn-small { height: 28px; padding: 0 10px; font-size: 12px; }
+.btn-tiny { width: 24px; height: 24px; }
+.btn-tiny .icon { width: 14px; height: 14px; }
+.btn-link { padding: 4px; border: 0; background: none; color: var(--text-secondary); font-size: 12px; }
+.btn-link:hover { color: var(--text); text-decoration: underline; }
+.input { width: 100%; min-width: 0; height: 30px; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); transition: border-color var(--fast); }
+.input:hover { border-color: #4a4d54; }
+.input:focus { border-color: var(--accent); outline: none; }
+textarea.input { height: auto; min-height: 58px; padding: 7px 9px; resize: vertical; line-height: 1.45; }
+select.input { padding-right: 6px; }
+.input::placeholder { color: var(--text-faint); }
+.input-group { display: flex; gap: 6px; align-items: center; }
+.input-short { max-width: 180px; }
+/* Caminho de "Abrir": ícone do tipo encontrado, campo e Procurar numa caixa só, status embaixo. */
+.path-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.path-box { display: flex; align-items: center; gap: 2px; height: 34px; padding: 0 3px 0 0; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); transition: border-color var(--fast); }
+.path-box:focus-within { border-color: var(--accent); }
+.path-icon { display: grid; place-items: center; width: 34px; height: 100%; flex: none; border-right: 1px solid var(--border-subtle); color: var(--text-secondary); }
+.path-icon[data-tone="ok"] { color: var(--text); }
+.path-icon[data-tone="warning"] { color: var(--pending); }
+.path-input.input { height: 100%; border: 0; background: transparent; }
+.path-input.input:focus { border: 0; }
+.path-box .btn { height: 26px; gap: 4px; padding: 0 8px; }
+.path-box .btn .icon { width: 13px; height: 13px; color: var(--text-secondary); }
+.path-status { min-height: 16px; color: var(--text-faint); font-size: 11px; }
+.path-status[data-tone="ok"] { color: var(--success); }
+.path-status[data-tone="warning"] { color: var(--pending); }
+.input-suffix { color: var(--text-secondary); }
+kbd { display: inline-flex; align-items: center; min-width: 22px; height: 22px; padding: 0 6px; border: 1px solid #4a4d54; border-bottom-width: 2px; border-radius: 4px; background: var(--bg-elevated); color: var(--text); font-weight: 600; justify-content: center; }
+.placeholder { color: var(--text-faint); }
+.toggle { display: inline-flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+.toggle input, .check-row input { accent-color: var(--accent); margin: 0; }

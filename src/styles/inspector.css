@@ -1,0 +1,64 @@
+/* Propriedades */
+.inspector-head { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+.inspector-head-row { display: flex; align-items: center; gap: 12px; min-height: 36px; }
+.inspector-placeholder { display: flex; align-items: center; min-height: 36px; color: var(--text-secondary); font-size: 13px; font-weight: 600; }
+.inspector-icon { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 8px; background: linear-gradient(180deg, #34363b, #2a2c30); color: var(--text); flex: none; }
+.inspector-icon.via-app { border-color: #3286ff59; background: linear-gradient(180deg, #23395a, #1d2c45); color: #a9cbff; }
+.inspector-icon .icon { width: 18px; height: 18px; }
+.inspector-title { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.inspector-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.inspector-title h2 { overflow: hidden; font-size: 14px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.inspector-title p { color: var(--text-faint); font-size: 12px; }
+.inspector-tools { display: flex; gap: 6px; margin-left: auto; }
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 8px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.chip .icon { width: 12px; height: 12px; }
+.chip-app { border-color: #3286ff4d; background: var(--accent-soft); color: #9cc3ff; }
+.chip-pending { border-color: #e8a9484d; background: #e8a9481f; color: var(--pending); }
+.chip-live { border-color: #45b58b4d; background: #45b58b1f; color: var(--success); }
+.chip-live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.inspector-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; user-select: text; }
+.inspector-grid { display: flex; gap: 20px; align-items: flex-start; }
+/* Miniatura do controle: a mesma keycap ou knob do aparelho, numa escala maior (--u). */
+.control-preview { flex: none; }
+.preview-stage { position: relative; display: grid; place-items: center; width: 104px; height: 104px; flex: none; border-radius: 12px; background: linear-gradient(135deg, #4b4c4e, #38393b 48%, #28292b); box-shadow: inset 0 1px 0 #ffffff1f, inset 0 0 0 1px #00000066, 0 8px 18px #0007; }
+.preview-key { --u: 4.4px; width: 72px; height: 72px; pointer-events: none; }
+.preview-knob { --u: 3.9px; width: 68px; height: 68px; margin-top: -7px; pointer-events: none; }
+.preview-badge { position: absolute; right: 8px; bottom: 8px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; box-shadow: 0 2px 8px #0009; }
+.preview-badge .icon { width: 15px; height: 15px; stroke-width: 2; }
+.inspector-hint { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; max-width: 460px; }
+.inspector-hint strong { font-weight: 600; }
+.inspector-hint p { color: var(--text-faint); font-size: 12px; line-height: 1.5; }
+.inspector-main { flex: 0 1 760px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.keycaps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.keycap-chip { display: inline-grid; place-items: center; min-width: 34px; height: 34px; padding: 0 10px 3px; border-radius: 7px; background: linear-gradient(180deg, #2b2d31, #1e1f22); box-shadow: inset 0 0 0 1px #00000080, 0 2px 0 #0e0f11, 0 4px 8px #0007; position: relative; color: #eceef1; font-size: 12px; font-weight: 600; }
+.keycap-chip::before { content: ""; position: absolute; inset: 2px 3px 5px; border-radius: 5px; background: linear-gradient(180deg, #46484e, #393b40); box-shadow: inset 0 1px 0 #ffffff1c; }
+.keycap-chip { isolation: isolate; }
+.keycap-chip::before { z-index: -1; }
+.form { display: flex; flex-direction: column; gap: 10px; max-width: 680px; }
+.field { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 14px; }
+.field-label { color: var(--text-secondary); text-align: right; }
+.field:has(textarea) { align-items: start; }
+.field:has(textarea) .field-label { padding-top: 6px; }
+.combo-control { display: flex; gap: 8px; align-items: center; }
+.shortcut-field { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; height: 32px; padding: 0 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); text-align: left; transition: border-color var(--fast), box-shadow var(--fast); }
+.shortcut-field:hover { border-color: #4a4d54; }
+.shortcut-field kbd { height: 22px; border: 0; border-radius: 4px; background: linear-gradient(180deg, #484a50, #3a3c41); box-shadow: inset 0 1px 0 #ffffff1c, 0 1px 0 #111214; font-family: inherit; font-size: 11px; }
+.shortcut-field .placeholder { padding-left: 4px; }
+.shortcut-field.recording { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.shortcut-field.recording .placeholder { color: var(--accent-hover); }
+.note { display: flex; gap: 8px; max-width: 680px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.note .icon { margin-top: 1px; color: var(--text-faint); }
+.note-warning, .note-warning .icon { color: var(--pending); }
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; flex: 1; padding: 12px; color: var(--text-secondary); text-align: center; }
+.empty-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 4px; border: 1px dashed var(--border); border-radius: 10px; color: var(--text-faint); }
+.empty-icon .icon { width: 20px; height: 20px; }
+.empty-state strong { color: var(--text); font-weight: 600; }
+.empty-state p { max-width: 400px; color: var(--text-faint); font-size: 12px; }
+.step-list { display: flex; flex-direction: column; gap: 8px; max-width: 680px; margin: 0; padding: 0; list-style: none; }
+.step { padding: 8px 10px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-app); }
+.step-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.step-index { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--bg-elevated); color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.step-head strong { font-weight: 600; }
+.step-tools { display: flex; gap: 2px; margin-left: auto; }
+.step .field { grid-template-columns: 92px minmax(0, 1fr); }
+.add-step { max-width: 220px; }

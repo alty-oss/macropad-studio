@@ -4,12 +4,12 @@
   "version": "0.2.0",
   "identifier": "com.macropad.studio",
   "build": {
-    "frontendDist": "../site",
+    "frontendDist": "../dist",
     "devUrl": "http://localhost:8000",
-    "beforeDevCommand": "bun --hot server/serve.js --dev"
+    "beforeDevCommand": "bun scripts/dev-server.ts",
+    "beforeBuildCommand": "bun run build:web"
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
@@ -31,11 +31,20 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
     "windows": {
       "nsis": {
-        "languages": ["PortugueseBR"],
+        "languages": [
+          "PortugueseBR"
+        ],
         "installMode": "currentUser"
       }
     }

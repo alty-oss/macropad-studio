@@ -1,29 +1,40 @@
 // Troca de relatórios HID. No app para Windows, o Rust abre o dispositivo (hidapi);
 // no navegador, usamos WebHID para pré-visualizar a interface.
-import { DEVICE } from './protocol.js';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { DEVICE } from './protocol.ts';
 
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+export interface Transport {
+  native: boolean;
+  supported: boolean;
+  connect(): Promise<void>;
+  send(payload: ArrayLike<number>): Promise<void>;
+  ask(payload: ArrayLike<number>, expected: number, timeout: number): Promise<ArrayLike<number>[]>;
+  onChange(callback: (present: boolean) => void): void;
+}
 
-function nativeTransport(tauri) {
-  const { invoke } = tauri.core;
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+function nativeTransport(): Transport {
   return {
     native: true,
     supported: true,
     connect: () => invoke('device_connect'),
     send: payload => invoke('device_send', { payload: Array.from(payload) }),
-    ask: (payload, expected, timeout) => invoke('device_ask', { payload: Array.from(payload), expected, timeoutMs: timeout }),
-    onChange(callback) { tauri.event.listen('device-changed', event => callback(event.payload)); }
+    ask: (payload, expected, timeout) => invoke<number[][]>('device_ask', { payload: Array.from(payload), expected, timeoutMs: timeout }),
+    onChange(callback) { listen<boolean>('device-changed', event => callback(event.payload)); }
   };
 }
 
-function webHidTransport() {
-  let device = null;
-  let collector = null;
-  const onInput = event => collector?.push(new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength));
-  const isConfigurationInterface = candidate => candidate.vendorId === DEVICE.vendorId && candidate.productId === DEVICE.productId &&
+function webHidTransport(): Transport {
+  let device: HIDDevice | null = null;
+  let collector: Uint8Array[] | null = null;
+  const onInput = (event: HIDInputReportEvent) => collector?.push(new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength));
+  const isConfigurationInterface = (candidate: HIDDevice) => candidate.vendorId === DEVICE.vendorId && candidate.productId === DEVICE.productId &&
     candidate.collections.some(collection => collection.usagePage === DEVICE.usagePage && collection.usage === DEVICE.usage &&
-      collection.outputReports.some(report => report.reportId === DEVICE.reportId));
-  async function send(payload) {
+      collection.outputReports?.some(report => report.reportId === DEVICE.reportId));
+  async function send(payload: ArrayLike<number>) {
+    if (!device) throw new Error('Macropad não conectado.');
     const bytes = new Uint8Array(DEVICE.reportLength);
     bytes.set(payload);
     await device.sendReport(DEVICE.reportId, bytes);
@@ -43,7 +54,7 @@ function webHidTransport() {
     },
     send,
     async ask(payload, expected, timeout) {
-      const answers = [];
+      const answers: Uint8Array[] = [];
       collector = answers;
       try {
         await send(payload);
@@ -62,4 +73,4 @@ function webHidTransport() {
   };
 }
 
-export const transport = window.__TAURI__ ? nativeTransport(window.__TAURI__) : webHidTransport();
+export const transport: Transport = isTauri() ? nativeTransport() : webHidTransport();

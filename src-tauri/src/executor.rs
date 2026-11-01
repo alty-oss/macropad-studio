@@ -1,5 +1,5 @@
 // Executor das etapas: abrir arquivos e sites, digitar texto e enviar atalhos.
-use crate::{config::Step, hook::held_modifiers};
+use crate::{config::Step, virtual_keys::held_modifiers};
 use std::{
     mem::size_of,
     ptr::{null, null_mut},

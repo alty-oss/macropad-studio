@@ -9,9 +9,9 @@ Configurador para Windows dos macropads CH57x identificados como USB `1189:8840`
 
 ### Teclas virtuais
 
-O descritor HID do teclado aceita usos de `0x00` a `0xFF`, então o macropad pode enviar F13–F24 (`0x68`–`0x73`), teclas que o Windows reconhece mas que nenhum teclado comum tem. Cada par (camada, slot) recebe um código fixo de F13–F24, combinado com Ctrl ou Shift, do lado esquerdo ou direito, quando os 12 códigos simples se esgotam (`virtualCode` em [site/protocol.js](site/protocol.js)). Alt e Win ficam de fora porque, sozinhos, abrem menus.
+O descritor HID do teclado aceita usos de `0x00` a `0xFF`, então o macropad pode enviar F13–F24 (`0x68`–`0x73`), teclas que o Windows reconhece mas que nenhum teclado comum tem. Cada par (camada, slot) recebe um código fixo de F13–F24, combinado com Ctrl ou Shift, do lado esquerdo ou direito, quando os 12 códigos simples se esgotam (`virtualCode` em [src/device/protocol.ts](src/device/protocol.ts)). Alt e Win ficam de fora porque, sozinhos, abrem menus.
 
-Um gancho de teclado de baixo nível ([src-tauri/src/hook.rs](src-tauri/src/hook.rs)) reconhece esses códigos, impede que cheguem aos outros programas e envia a ação ao executor ([src-tauri/src/actions.rs](src-tauri/src/actions.rs)). Por isso o app precisa estar aberto, mesmo que só na bandeja. As etapas ficam em `%APPDATA%\com.macropad.studio\config.json`.
+Um gancho de teclado de baixo nível ([src-tauri/src/virtual_keys.rs](src-tauri/src/virtual_keys.rs)) reconhece esses códigos, impede que cheguem aos outros programas e envia a ação ao executor ([src-tauri/src/executor.rs](src-tauri/src/executor.rs)). Por isso o app precisa estar aberto, mesmo que só na bandeja. As etapas ficam em `%APPDATA%\com.macropad.studio\config.json`.
 
 ## Desenvolvimento
 
@@ -19,25 +19,47 @@ Requisitos: [Bun](https://bun.sh/), Rust (`rustup`) e Visual Studio Build Tools 
 
 ```powershell
 bun install
-bun run dev      # abre o app com recarga automática da interface
-bun run build    # gera o instalador em src-tauri\target\release\bundle\nsis
-bun run test     # verifica o protocolo sem conectar o macropad
+bun run dev        # abre o app com recarga automática da interface
+bun run build      # gera o instalador em src-tauri\target\release\bundle\nsis
+bun run test       # verifica o protocolo sem conectar o macropad
+bun run typecheck  # checagem de tipos do TypeScript (modo estrito)
 ```
 
 `bun run web` serve só a interface em `http://localhost:8000` para o Chrome/Edge, usando WebHID. Nesse modo, as ações do app ficam indisponíveis.
 
+O projeto é em TypeScript. O Bun roda o servidor e os testes direto do `.ts`; a interface, que o WebView2 executa como JavaScript, é empacotada pelo próprio Bun: sob demanda no servidor de desenvolvimento, com recarga automática, e em `dist/` por `bun run build:web` antes do build de release.
+
 ## Organização
 
-- `site/`: interface (HTML, CSS e módulos JavaScript, sem etapa de build).
-  - `protocol.js`: comandos do dispositivo, tabelas de teclas e teclas virtuais.
-  - `transport.js`: troca de relatórios HID, via Rust no app ou via WebHID no navegador.
-  - `app.js`: editor (pré-visualização, biblioteca de ações, propriedades).
-- `src-tauri/`: app nativo.
-  - `device.rs`: abre a interface de configuração (página `0xFF00`) com `hidapi`.
-  - `hook.rs` e `actions.rs`: teclas virtuais e executor das etapas.
-  - `main.rs`: comandos, bandeja, inicialização com o Windows e instância única.
-- `server/serve.js`: servidor local usado por `bun run dev` e `bun run web`.
-- `tests/`: verificação do protocolo e da correspondência entre JavaScript e HTML.
+```
+src/                    interface (o WebView do app)
+  index.html, main.ts   página e ponto de entrada: liga os eventos e conecta ao macropad
+  device/               tudo do hardware, sem DOM
+    keys.ts             nomes das teclas HID, layout do teclado virtual, modificadores e mídia
+    protocol.ts         slots, teclas virtuais, codificação dos registros e os tipos Binding, Step e Macro
+    transport.ts        troca de relatórios HID: Rust no app (@tauri-apps/api) ou WebHID no navegador
+  editor/               a tela do editor
+    state.ts            estado: conexão, camadas (dispositivo e rascunhos) e seleção
+    editing.ts          rascunhos, seleção, copiar e colar
+    session.ts          conexão, leitura das camadas e gravação
+    board.ts            pré-visualização do aparelho, arrastar e soltar, funções do knob
+    inspector.ts        painel de propriedades e formulários de cada ação
+    library.ts          biblioteca de ações e busca
+    shortcuts.ts        captura de atalhos e teclado virtual
+    legend.ts           títulos, ícones e legendas impressas nas keycaps
+    chrome.ts           tela de conexão, cabeçalho, faixa de aviso e rodapé
+    menu.ts, feedback.ts, settings.ts   menu flutuante, avisos e configurações
+  lib/                  utilitários sem regra de negócio (dom.ts, icons.ts, text.ts)
+  styles/               main.css importa um arquivo por área da tela
+src-tauri/              app nativo (Rust)
+  src/device.rs         abre a interface de configuração (página 0xFF00) com hidapi
+  src/virtual_keys.rs   gancho de teclado que reconhece as teclas virtuais
+  src/executor.rs       executa as etapas: abrir, site, texto, atalho, aguardar
+  src/config.rs         macros salvas em %APPDATA%
+  src/main.rs           comandos, bandeja, inicialização com o Windows e instância única
+scripts/dev-server.ts   servidor de desenvolvimento usado por `bun run dev` e `bun run web`
+tests/                  `bun test`: protocolo e correspondência entre os módulos e o HTML
+```
 
 ## Uso
 

@@ -1,10 +1,10 @@
 // Macropad Studio: janela de configuração, ícone na bandeja e executor das teclas virtuais.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod actions;
 mod config;
 mod device;
-mod hook;
+mod executor;
+mod virtual_keys;
 
 use config::{Config, Macro, Step};
 use device::Hid;
@@ -63,7 +63,7 @@ fn macros_save(state: State<AppState>, macros: Vec<Macro>) -> Result<(), String>
     let mut config = state.config.lock().unwrap();
     config.macros = macros;
     config.save(&state.config_path)?;
-    hook::set_routes(&config.macros);
+    virtual_keys::set_routes(&config.macros);
     Ok(())
 }
 
@@ -153,7 +153,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 // As ações rodam numa thread própria: o gancho de teclado precisa responder na hora.
 fn spawn_executor(app: AppHandle, queue: mpsc::Receiver<Job>) {
     thread::spawn(move || {
-        actions::init_thread();
+        executor::init_thread();
         for job in queue {
             let (steps, from_device) = match job {
                 Job::Fired(layer, slot) => {
@@ -165,7 +165,7 @@ fn spawn_executor(app: AppHandle, queue: mpsc::Receiver<Job>) {
                 }
                 Job::Run(steps) => (steps, false),
             };
-            if let Err(error) = actions::run(&steps, from_device) {
+            if let Err(error) = executor::run(&steps, from_device) {
                 app.emit("macro-error", error).ok();
             }
         }
@@ -196,10 +196,10 @@ fn main() {
             let config = Config::load(&config_path);
             let (jobs, queue) = mpsc::channel();
             let fired = Mutex::new(jobs.clone());
-            hook::start(move |layer, slot| {
+            virtual_keys::start(move |layer, slot| {
                 fired.lock().unwrap().send(Job::Fired(layer, slot)).ok();
             });
-            hook::set_routes(&config.macros);
+            virtual_keys::set_routes(&config.macros);
             app.manage(AppState { hid: Mutex::new(Hid::new()), config: Mutex::new(config), config_path, jobs: Mutex::new(jobs) });
             spawn_executor(app.handle().clone(), queue);
             spawn_device_watch(app.handle().clone());
