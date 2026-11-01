@@ -3,14 +3,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:css": "tailwindcss -i ./site/tailwind.input.css -o ./site/tailwind.css --minify",
-    "watch:css": "tailwindcss -i ./site/tailwind.input.css -o ./site/tailwind.css --watch=always --minify",
-    "dev": "bun server/dev.js",
-    "start": "bun server/serve.js",
-    "test": "bun tests/test-protocol.cjs"
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "build:web": "bun build ./src/index.html --outdir ./dist --minify",
+    "web": "bun scripts/dev-server.ts",
+    "icons": "tauri icon src-tauri/icons/app-icon.svg",
+    "typecheck": "tsc -p .",
+    "test": "bun test"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4",
-    "tailwindcss": "^4"
+    "@tauri-apps/cli": "^2",
+    "@types/bun": "^1.4.4",
+    "@types/w3c-web-hid": "^1.0.7",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2"
   }
 }

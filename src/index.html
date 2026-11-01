@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Macropad Studio</title>
+  <link rel="stylesheet" href="./styles/main.css">
+  <script type="module" src="./main.ts"></script>
+</head>
+<body data-view="connect">
+  <section id="connect-screen" class="connect-screen" aria-labelledby="connect-title">
+    <div class="connect-card">
+      <div class="connect-icon" data-icon="plug"></div>
+      <h1 id="connect-title">Conecte seu macropad</h1>
+      <p id="connect-text">Ligue o macropad ao computador pelo cabo USB. O Macropad Studio detecta o dispositivo automaticamente.</p>
+      <div id="connect-status" class="connect-status" role="status"><span class="spinner"></span><span>Aguardando dispositivo…</span></div>
+      <button id="connect" class="btn btn-primary" type="button" hidden>Conectar dispositivo</button>
+      <button id="offline" class="btn-link" type="button">Continuar sem dispositivo</button>
+    </div>
+    <p class="connect-foot">Macropads CH57x · USB 1189:8840</p>
+  </section>
+
+  <div id="editor" class="app">
+    <header class="titlebar">
+      <div class="brand"><span class="brand-mark" data-icon="logo"></span>Macropad Studio</div>
+      <div class="titlebar-group">
+        <span class="titlebar-label" id="layer-label">Camada</span>
+        <div id="layers" class="segmented" role="radiogroup" aria-labelledby="layer-label"></div>
+      </div>
+      <div class="titlebar-spacer"></div>
+      <span id="sync-state" class="sync-state"></span>
+      <button id="read" class="btn btn-icon" type="button" aria-label="Ler a camada do dispositivo" data-icon="refresh"></button>
+      <button id="save" class="btn btn-primary" type="button"><span data-icon="download"></span><span id="save-label">Gravar no dispositivo</span></button>
+      <button id="open-backup" class="btn btn-icon" type="button" aria-label="Importar ou exportar configuração" aria-haspopup="menu" data-icon="archive"></button>
+      <button id="open-settings" class="btn btn-icon" type="button" aria-label="Configurações" data-icon="settings"></button>
+    </header>
+    <div id="banner" class="banner" role="status" hidden><span data-icon="warning"></span><span id="banner-text"></span></div>
+
+    <main class="workspace">
+      <section class="canvas" aria-label="Pré-visualização do macropad">
+        <div class="canvas-tools">
+          <span id="layout-name" class="canvas-caption">12 teclas · 3 knobs</span>
+          <label class="toggle"><input id="legends" type="checkbox" checked><span>Legendas</span></label>
+        </div>
+        <div class="device-stage">
+          <div class="device-frame">
+            <div class="device-body">
+              <svg class="device-plate" viewBox="0 0 1080 1360" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                <defs>
+                  <linearGradient id="case-metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4b4c4e"/><stop offset=".48" stop-color="#38393b"/><stop offset="1" stop-color="#28292b"/></linearGradient>
+                  <!-- Parafuso Phillips: rebaixo na carcaça, cabeça com luz vinda do alto à esquerda e fenda em cruz. -->
+                  <radialGradient id="screw-head" cx=".36" cy=".3" r=".85"><stop stop-color="#f7f5f0"/><stop offset=".35" stop-color="#c3c2be"/><stop offset=".78" stop-color="#77787b"/><stop offset="1" stop-color="#4a4b4e"/></radialGradient>
+                  <linearGradient id="screw-well" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0c0d0e"/><stop offset=".55" stop-color="#26272a"/><stop offset="1" stop-color="#5a5b5e"/></linearGradient>
+                  <g id="screw-head-shape"><circle r="20" fill="url(#screw-well)"/><circle r="15.6" fill="#121314"/><circle r="14.6" fill="url(#screw-head)"/><circle r="14.1" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1"/></g>
+                  <g id="screw-cross" stroke-linecap="round" fill="none"><path d="M-6.4 0H6.4M0 -6.4V6.4" transform="translate(.9 .9)" stroke="#f2f0ea" stroke-opacity=".55" stroke-width="4"/><path d="M-6.4 0H6.4M0 -6.4V6.4" stroke="#3a3b3e" stroke-width="4"/><path d="M-4.6 0H4.6M0 -4.6V4.6" stroke="#161719" stroke-width="1.8"/></g>
+                  <ellipse id="screw-glint" cx="-5" cy="-6.5" rx="4.2" ry="2.2" transform="rotate(-35 -5 -6.5)" fill="#fff" fill-opacity=".55"/>
+                  <filter id="matte-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".6" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".055"/></feComponentTransfer><feComposite in2="SourceAlpha" operator="in"/></filter>
+                </defs>
+                <path id="case-outline" d="M110 42 C82 42 62 62 62 90 L62 1286 C62 1314 80 1332 108 1332 L676 1332 C704 1332 720 1314 720 1286 L720 581 C720 503 743 459 821 438 C899 416 996 412 1033 336 C1076 247 1064 153 1024 101 C984 47 924 42 850 42 Z" fill="url(#case-metal)" stroke="#171719" stroke-width="10" stroke-linejoin="round"/>
+                <use href="#case-outline" fill="#fff" stroke="none" filter="url(#matte-grain)"/>
+                <path d="M112 50 C88 50 70 68 70 92 L70 1284 C70 1308 84 1324 108 1324 L674 1324" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="3"/>
+                <g class="led-indicators"><rect x="336" y="421" width="21" height="31" rx="5"/><rect x="365" y="421" width="21" height="31" rx="5"/><rect x="394" y="421" width="21" height="31" rx="5"/></g>
+                <g class="screw" transform="translate(102 84)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(-12)"/><use href="#screw-glint"/></g>
+                <g class="screw" transform="translate(696 140)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(18)"/><use href="#screw-glint"/></g>
+                <g class="screw" transform="translate(696 336)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(-27)"/><use href="#screw-glint"/></g>
+                <g class="screw" transform="translate(102 1290)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(41)"/><use href="#screw-glint"/></g>
+                <g class="screw" transform="translate(665 1294)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(7)"/><use href="#screw-glint"/></g>
+              </svg>
+              <div id="knobs" class="device-knobs"></div>
+              <div id="keys" class="device-keys"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="inspector" class="inspector" aria-labelledby="inspector-title">
+        <div id="inspector-head" class="inspector-head"></div>
+        <div id="inspector-body" class="inspector-body"></div>
+      </section>
+
+      <aside class="library" aria-label="Ações">
+        <div class="library-head">
+          <h2>Ações</h2>
+          <div class="search"><span data-icon="search"></span><input id="action-search" type="text" placeholder="Buscar ação" aria-label="Buscar ação" autocomplete="off" spellcheck="false"><kbd class="search-hint">Ctrl F</kbd><button id="clear-search" class="search-clear" type="button" aria-label="Limpar busca" data-icon="x" hidden></button></div>
+          <p id="library-context" class="library-context"></p>
+        </div>
+        <div id="action-list" class="action-list"></div>
+      </aside>
+    </main>
+
+    <footer class="statusbar">
+      <span id="status-device" class="status-item"></span>
+      <span id="status-message" class="status-message"></span>
+      <span id="status-mode" class="status-item"></span>
+    </footer>
+  </div>
+
+  <dialog id="keyboard-modal" class="modal modal-wide" aria-labelledby="keyboard-title">
+    <header class="modal-head">
+      <div><h2 id="keyboard-title">Teclado virtual</h2><p>Clique em Ctrl, Shift, Alt ou Win para combinar e depois na tecla principal. Os símbolos seguem o layout ativo do Windows.</p></div>
+      <button id="close-keyboard" class="btn btn-icon" type="button" aria-label="Cancelar e fechar" data-icon="x"></button>
+    </header>
+    <div class="modal-body"><div class="keyboard-scroll"><div id="virtual-keyboard" class="virtual-keyboard" aria-label="Teclado virtual completo"></div></div></div>
+    <footer class="modal-foot">
+      <div class="combo-preview"><span>Combinação</span><span id="keyboard-summary" class="kbd-row"></span></div>
+      <div class="modal-actions"><button id="cancel-keyboard" class="btn" type="button">Cancelar</button><button id="confirm-keyboard" class="btn btn-primary" type="button">Concluir</button></div>
+    </footer>
+  </dialog>
+
+  <dialog id="settings-modal" class="modal" aria-labelledby="settings-title">
+    <header class="modal-head">
+      <div><h2 id="settings-title">Configurações</h2></div>
+      <button id="close-settings" class="btn btn-icon" type="button" aria-label="Fechar" data-icon="x"></button>
+    </header>
+    <div class="modal-body settings">
+      <section id="settings-app">
+        <h3>Aplicativo</h3>
+        <label class="check-row"><input id="autostart" type="checkbox"><span><strong>Iniciar com o Windows</strong><small>Abre minimizado na bandeja para que as ações do app funcionem desde o login.</small></span></label>
+        <p class="settings-note">Fechar a janela mantém o Macropad Studio na bandeja. Para encerrar, use <strong>Sair</strong> no ícone da bandeja.</p>
+      </section>
+      <section>
+        <div class="settings-row"><h3>Registro de atividade</h3><button id="clear-log" class="btn-link" type="button">Limpar</button></div>
+        <output id="log" class="log" aria-live="polite">Pronto.</output>
+      </section>
+      <section>
+        <h3>Sobre</h3>
+        <p class="settings-note">O editor envia apenas os comandos documentados de leitura e gravação de atalhos (<code>0xFA</code>/<code>0xFB</code>/<code>0xFE</code>). Não altera firmware nem modelo do teclado.</p>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="confirm-modal" class="modal modal-small" aria-labelledby="confirm-title">
+    <div class="modal-body"><h2 id="confirm-title"></h2><p id="confirm-text"></p></div>
+    <footer class="modal-foot"><span></span><div class="modal-actions"><button id="confirm-cancel" class="btn" type="button">Cancelar</button><button id="confirm-ok" class="btn btn-primary" type="button">Confirmar</button></div></footer>
+  </dialog>
+
+  <div id="context-menu" class="context-menu" role="menu" hidden></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+</body>
+</html>

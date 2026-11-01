@@ -1,0 +1,54 @@
+/* Teclado QWERTY virtual: a unidade acompanha a largura do diálogo, sem cortar nem rolar. */
+.keyboard-scroll { container-type: inline-size; }
+.virtual-keyboard {
+  --unit: clamp(26px, calc((100cqw - 4px) / 25.8), 46px);
+  --gap: calc(var(--unit) * .1);
+  display: grid; grid-template-columns: auto auto auto; column-gap: calc(var(--unit) * .45); row-gap: calc(var(--unit) * .42);
+  width: max-content; margin: 0 auto; padding: calc(var(--unit) * .42);
+  border-radius: calc(var(--unit) * .34);
+  background: linear-gradient(180deg, #232528, #18191b);
+  box-shadow: inset 0 1px 0 #ffffff12, inset 0 0 0 1px #0000004d, 0 0 0 1px #2e3035, 0 22px 50px #0009;
+}
+.function-row { display: flex; justify-content: space-between; }
+.function-row .function-group:first-child { margin-right: var(--unit); }
+.function-group, .keyboard-row, .navigation-row { display: flex; gap: var(--gap); }
+.keyboard-main, .navigation-cluster { display: flex; flex-direction: column; gap: var(--gap); }
+.keyboard-row, .navigation-row { min-height: var(--unit); }
+.arrow-cluster { margin-top: var(--unit); }
+.arrow-up { justify-content: center; }
+.keyboard-leds { display: flex; align-items: center; justify-content: space-around; color: #6f727a; font-size: calc(var(--unit) * .2); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.keyboard-leds span { display: flex; flex-direction: column; align-items: center; gap: calc(var(--unit) * .1); }
+.keyboard-leds i { width: calc(var(--unit) * .14); height: calc(var(--unit) * .14); border-radius: 50%; background: #2f3237; box-shadow: inset 0 1px 1px #0008; }
+/* Keycap de perfil OEM: base (skirt) e face superior. As margens da face usam a unidade da
+   tecla, não porcentagem, para que Espaço e Shift tenham a mesma borda que uma letra. */
+.virtual-key {
+  --face: calc(var(--unit) * .07) calc(var(--unit) * .11) calc(var(--unit) * .18);
+  position: relative; isolation: isolate; flex: none;
+  width: calc(var(--unit) * var(--span, 1) + (var(--span, 1) - 1) * var(--gap)); height: var(--unit);
+  padding: 0; border: 0; border-radius: calc(var(--unit) * .16);
+  background:
+    linear-gradient(90deg, #0000004d, #0000 calc(var(--unit) * .14), #0000 calc(100% - var(--unit) * .14), #0000004d),
+    linear-gradient(180deg, #303236, #1d1e21);
+  box-shadow: inset 0 0 0 1px #000000a6, inset 0 1px 0 #ffffff14, 0 calc(var(--unit) * .05) 0 #0b0c0e, 0 calc(var(--unit) * .12) calc(var(--unit) * .22) #000a;
+  color: #e9eaed; transition: transform 70ms, box-shadow 70ms;
+}
+.virtual-key::before {
+  content: ""; position: absolute; z-index: -1; inset: var(--face);
+  border-radius: calc(var(--unit) * .12);
+  background: radial-gradient(120% 90% at 50% 0%, #4d4f55, #3a3c41 70%, #35373c);
+  box-shadow: inset 0 1px 0 #ffffff24, inset 0 -1px 0 #00000059, 0 1px 1px #0006;
+  transition: background var(--fast), box-shadow var(--fast);
+}
+.virtual-key.modifier { background: linear-gradient(90deg, #0000004d, #0000 calc(var(--unit) * .14), #0000 calc(100% - var(--unit) * .14), #0000004d), linear-gradient(180deg, #27292c, #18191b); }
+.virtual-key.modifier::before { background: radial-gradient(120% 90% at 50% 0%, #3f4146, #2f3135 70%, #2b2d31); }
+.key-label { position: absolute; inset: var(--face); display: flex; align-items: flex-start; justify-content: flex-start; padding: calc(var(--unit) * .09) calc(var(--unit) * .12); font-size: calc(var(--unit) * .3); font-weight: 600; line-height: 1; white-space: nowrap; text-shadow: 0 1px 0 #0008; pointer-events: none; }
+.virtual-key.word .key-label { align-items: flex-end; font-size: calc(var(--unit) * .21); letter-spacing: .01em; }
+.virtual-key.centered .key-label { align-items: center; justify-content: center; }
+.virtual-key:hover::before { background: radial-gradient(120% 90% at 50% 0%, #5a5c63, #44464c 70%, #3f4146); }
+.virtual-key:active { transform: translateY(calc(var(--unit) * .035)); box-shadow: inset 0 0 0 1px #000000a6, inset 0 1px 0 #ffffff14, 0 calc(var(--unit) * .015) 0 #0b0c0e, 0 calc(var(--unit) * .05) calc(var(--unit) * .1) #000a; }
+.virtual-key[aria-pressed="true"] { background: linear-gradient(180deg, #1f4f99, #143467); box-shadow: inset 0 0 0 1px #0a1e3d, 0 calc(var(--unit) * .05) 0 #0a1e3d, 0 0 calc(var(--unit) * .45) #3286ff66; color: #fff; }
+.virtual-key[aria-pressed="true"]::before { background: radial-gradient(120% 90% at 50% 0%, #5aa0ff, #3283f5 70%, #2c78e8); box-shadow: inset 0 1px 0 #ffffff47, inset 0 -1px 0 #0003; }
+.numpad-grid { display: grid; grid-template-columns: repeat(4, var(--unit)); grid-template-rows: repeat(5, var(--unit)); gap: var(--gap); }
+.numpad-grid .virtual-key { width: 100%; height: 100%; }
+.numpad-grid .span-two { grid-column: span 2; }
+.numpad-grid .tall { grid-row: span 2; }

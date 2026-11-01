@@ -23,4 +23,5 @@ Desktop.ini
 *.swp
 *~
 
-# site/tailwind.css é intencionalmente versionado para uso offline.
+# Interface empacotada por `bun run build:web`
+dist/
