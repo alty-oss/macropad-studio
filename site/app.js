@@ -37,6 +37,7 @@ const icons = {
   warning: '<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4M12 16.8h.01"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8h.01"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  bolt: '<path d="M13 3 5 13.5h6.5L10.5 21 19 10.5h-6.5z"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
@@ -124,17 +125,17 @@ function controlLabel(slot) {
   const info = controlInfo(slot);
   return info.part ? `${info.name} · ${info.part}` : info.name;
 }
+// where: 'device' para ações gravadas no macropad, 'app' para as executadas por teclas virtuais.
 function bindingMeta(binding) {
-  const onDevice = 'Gravado no macropad, funciona sem o app';
-  if (binding.kind === 'key') return { title: 'Atalho de teclado', icon: 'keyboard', where: onDevice };
-  if (binding.kind === 'media') return { title: mediaNames.get(binding.media) || 'Mídia', icon: mediaIcons.get(binding.media) || 'volumeUp', where: onDevice };
+  if (binding.kind === 'key') return { title: 'Atalho de teclado', icon: 'keyboard', where: 'device' };
+  if (binding.kind === 'media') return { title: mediaNames.get(binding.media) || 'Mídia', icon: mediaIcons.get(binding.media) || 'volumeUp', where: 'device' };
   if (binding.kind === 'app') {
     const type = binding.steps[0]?.type;
-    return binding.multi ? { title: 'Multi-ação', icon: 'multi', where: 'Executada pelo app' }
-      : { title: stepNames[type] || 'Ação do app', icon: stepIcons[type] || 'multi', where: 'Executada pelo app' };
+    return binding.multi ? { title: 'Multi-ação', icon: 'multi', where: 'app' }
+      : { title: stepNames[type] || 'Ação do app', icon: stepIcons[type] || 'multi', where: 'app' };
   }
-  if (binding.kind === 'raw') return { title: 'Ação existente', icon: 'warning', where: 'Mantida como está no dispositivo' };
-  return { title: 'Sem ação', icon: 'empty', where: '' };
+  if (binding.kind === 'raw') return { title: 'Ação existente', icon: 'warning', where: 'device' };
+  return { title: 'Sem ação', icon: 'empty', where: null };
 }
 // Legenda como numa tecla impressa: ícone ou modificadores em cima, texto principal embaixo.
 function legendFor(binding) {
@@ -232,7 +233,7 @@ function controlButton(slot, className, ...content) {
   const binding = bindingAt(slot);
   const button = h('button', {
     type: 'button', class: className, draggable: 'true', 'data-slot': slot, 'aria-pressed': String(state.selected === slot),
-    'aria-label': `${controlLabel(slot)}: ${labelFor(binding)}`, title: `${controlLabel(slot)} · ${labelFor(binding)}`
+    'aria-label': `${controlLabel(slot)}: ${labelFor(binding)}`
   }, ...content);
   button.classList.toggle('selected', state.selected === slot);
   button.classList.toggle('dirty', layerData().drafts.has(slot));
@@ -280,7 +281,7 @@ function renderLayers() {
     const number = index + 1;
     return h('button', {
       type: 'button', role: 'radio', class: 'segment', 'aria-checked': String(number === state.layer), disabled: state.busy,
-      title: layer.drafts.size ? `Camada ${number} · ${plural(layer.drafts.size, 'alteração não gravada', 'alterações não gravadas')}` : `Camada ${number}`,
+      'aria-label': layer.drafts.size ? `Camada ${number} · ${plural(layer.drafts.size, 'alteração não gravada', 'alterações não gravadas')}` : `Camada ${number}`,
       onclick: () => switchLayer(number)
     }, String(number), layer.drafts.size ? h('span', { class: 'segment-dot' }) : null);
   }));
@@ -328,37 +329,52 @@ function renderInspectorHead() {
   const slot = state.selected;
   if (!slot) { $('#inspector-head').replaceChildren(h('h2', { id: 'inspector-title', class: 'inspector-placeholder' }, 'Propriedades')); return; }
   const binding = bindingAt(slot), meta = bindingMeta(binding);
-  $('#inspector-head').replaceChildren(
-    h('span', { class: 'inspector-icon' }, icon(meta.icon)),
-    h('div', { class: 'inspector-title' }, h('h2', { id: 'inspector-title' }, meta.title), h('p', {}, [controlLabel(slot), `Camada ${state.layer}`, meta.where].filter(Boolean).join(' · '))),
-    layerData().drafts.has(slot) ? h('span', { class: 'pill' }, 'Não gravado') : null,
+  // h() descarta os filhos nulos; replaceChildren os transformaria no texto "null".
+  $('#inspector-head').replaceChildren(h('div', { class: 'inspector-head-row' },
+    h('span', { class: `inspector-icon${meta.where === 'app' ? ' app' : ''}` }, icon(meta.icon)),
+    h('div', { class: 'inspector-title' },
+      h('div', { class: 'inspector-title-row' },
+        h('h2', { id: 'inspector-title' }, meta.title),
+        meta.where === 'device' ? h('span', { class: 'chip' }, icon('logo'), 'No macropad') : null,
+        meta.where === 'app' ? h('span', { class: 'chip chip-app' }, icon('bolt'), 'Via app') : null,
+        layerData().drafts.has(slot) ? h('span', { class: 'chip chip-pending' }, 'Não gravado') : null),
+      h('p', {}, `${controlLabel(slot)} · Camada ${state.layer}`)),
     h('div', { class: 'inspector-tools' },
       binding.kind === 'app' && tauri ? h('button', { type: 'button', class: 'btn btn-small', onclick: () => testBinding(bindingAt(slot)) }, icon('play'), 'Testar') : null,
-      binding.kind !== 'empty' ? h('button', { type: 'button', class: 'btn btn-small', onclick: () => setDraft(slot, { kind: 'empty' }) }, icon('trash'), 'Remover') : null)
-  );
+      binding.kind !== 'empty' ? h('button', { type: 'button', class: 'btn btn-small', onclick: () => setDraft(slot, { kind: 'empty' }) }, icon('trash'), 'Remover') : null)));
 }
-const emptyState = (title, text) => h('div', { class: 'empty-state' }, h('strong', {}, title), h('p', {}, text));
+const emptyState = (title, text, name = 'empty') => h('div', { class: 'empty-state' }, h('span', { class: 'empty-icon' }, icon(name)), h('strong', {}, title), h('p', {}, text));
+const keycaps = (mods, code) => h('div', { class: 'keycaps' }, comboLabel(mods, code).map(part => h('span', { class: 'keycap-chip' }, part)));
+const aside = (title, text, ...extra) => h('aside', { class: 'inspector-aside' }, h('strong', {}, title), ...extra, h('p', {}, text));
 const field = (label, ...control) => h('div', { class: 'field' }, h('span', { class: 'field-label' }, label), h('div', { class: 'field-control' }, ...control));
 const note = (text, tone = 'info') => h('p', { class: `note note-${tone}` }, icon(tone === 'warning' ? 'warning' : 'info'), h('span', {}, text));
 function renderInspectorBody() {
   const slot = state.selected;
   const body = $('#inspector-body');
   if (!slot) {
-    body.replaceChildren(emptyState('Selecione uma tecla ou um knob', 'Arraste uma ação da lista à direita até um controle, ou selecione o controle e clique na ação.'));
+    body.replaceChildren(emptyState('Selecione uma tecla ou um knob', 'Arraste uma ação da lista à direita até um controle, ou selecione o controle e clique na ação.', 'logo'));
     return;
   }
   const binding = bindingAt(slot);
+  const onDevice = 'Fica na memória do macropad e funciona em qualquer computador, mesmo com o app fechado.';
+  const layout = (main, side) => body.replaceChildren(h('div', { class: 'inspector-grid' }, h('div', { class: 'inspector-main' }, main), side));
   if (binding.kind === 'empty') body.replaceChildren(emptyState('Este controle está sem ação', 'Arraste uma ação da lista à direita até ele, ou clique em uma ação para atribuí-la.'));
   else if (binding.kind === 'key') {
-    body.replaceChildren(h('div', { class: 'form' }, field('Combinação', comboControl(binding, combo => setDraft(slot, { kind: 'key', ...combo })))),
-      note('A combinação fica gravada no macropad e funciona em qualquer computador, mesmo sem o app.'));
+    layout(h('div', { class: 'form' }, field('Combinação', comboControl(binding, combo => setDraft(slot, { kind: 'key', ...combo })))),
+      aside('Gravado no macropad', onDevice, binding.code ? keycaps(binding.mods, binding.code) : null));
   } else if (binding.kind === 'media') {
     const select = h('select', { class: 'input', onchange: event => setDraft(slot, { kind: 'media', media: Number(event.target.value) }) },
       [...media].map(([name, code]) => h('option', { value: code, selected: code === binding.media }, name)));
-    body.replaceChildren(h('div', { class: 'form' }, field('Ação', select)));
+    layout(h('div', { class: 'form' }, field('Ação', select)), aside('Gravado no macropad', onDevice));
   } else if (binding.kind === 'raw') {
-    body.replaceChildren(note(`${binding.label}. Este editor não representa essa ação; ela será mantida até você atribuir outra.`, 'warning'));
-  } else body.replaceChildren(...appEditor(slot, binding));
+    layout(note(`${binding.label}. Este editor não representa essa ação; ela será mantida até você atribuir outra.`, 'warning'),
+      aside('Ação existente', 'Foi gravada por outro programa. Atribua uma nova ação para substituí-la.'));
+  } else {
+    const virtual = virtualCode(state.layer, slot);
+    layout(appEditor(slot, binding), aside('Tecla virtual', tauri
+      ? 'Ao gravar, o macropad passa a enviar esta tecla. O Macropad Studio a intercepta e executa a ação, mesmo minimizado na bandeja.'
+      : 'Ações do app só funcionam no Macropad Studio para Windows.', keycaps(virtual.mods, virtual.code)));
+  }
 }
 function kbdRow(mods, code, placeholder) {
   const parts = comboLabel(mods, code);
@@ -370,7 +386,7 @@ function comboControl(value, onChange) {
 }
 let capture = null;
 function shortcutField(value, onChange) {
-  const element = h('button', { type: 'button', class: 'shortcut-field', title: 'Clique e pressione a combinação. Para Win ou Alt+Tab, use o teclado virtual.' },
+  const element = h('button', { type: 'button', class: 'shortcut-field' },
     ...kbdRow(value.mods, value.code, 'Clique e pressione a combinação'));
   element.addEventListener('click', () => startCapture(element, onChange));
   return element;
@@ -412,11 +428,7 @@ function appEditor(slot, binding) {
     setDraft(slot, { ...current, steps }, { keepBody: !rerender });
   };
   const edit = (index, patch, rerender) => setSteps(steps => Object.assign(steps[index], patch), rerender);
-  const nodes = binding.multi ? stepList(binding, edit, setSteps) : [h('div', { class: 'form' }, stepFields(binding.steps[0], 0, edit))];
-  const virtual = virtualCode(state.layer, slot);
-  nodes.push(note(`Ao gravar, o macropad passa a enviar ${comboLabel(virtual.mods, virtual.code).join(' + ')}, uma tecla virtual. O Macropad Studio a intercepta e executa a ação, mesmo minimizado na bandeja.`));
-  if (!tauri) nodes.push(note('Ações do app só funcionam no Macropad Studio para Windows.', 'warning'));
-  return nodes;
+  return binding.multi ? stepList(binding, edit, setSteps) : [h('div', { class: 'form' }, stepFields(binding.steps[0], 0, edit))];
 }
 function stepFields(step, index, edit) {
   if (step.type === 'open') {
@@ -450,7 +462,7 @@ function stepFields(step, index, edit) {
 }
 function stepList(binding, edit, setSteps) {
   const last = binding.steps.length - 1;
-  const tool = (name, label, disabled, action) => h('button', { type: 'button', class: 'btn btn-icon btn-tiny', title: label, 'aria-label': label, disabled, onclick: action }, icon(name));
+  const tool = (name, label, disabled, action) => h('button', { type: 'button', class: 'btn btn-icon btn-tiny', 'aria-label': label, disabled, onclick: action }, icon(name));
   const items = binding.steps.map((step, index) => h('li', { class: 'step' },
     h('div', { class: 'step-head' },
       h('span', { class: 'step-index' }, String(index + 1)), icon(stepIcons[step.type]), h('strong', {}, stepNames[step.type]),
@@ -493,8 +505,7 @@ function renderLibrary() {
 function actionItem(item, group) {
   const unavailable = group.app && !tauri;
   const button = h('button', {
-    type: 'button', class: 'action-item', draggable: unavailable ? null : 'true', disabled: unavailable,
-    title: unavailable ? 'Disponível no Macropad Studio para Windows' : item.description || item.name
+    type: 'button', class: 'action-item', draggable: unavailable ? null : 'true', disabled: unavailable
   }, h('span', { class: 'action-icon' }, icon(item.icon)), h('span', { class: 'action-text' }, h('span', {}, item.name), item.description ? h('small', {}, item.description) : null));
   button.addEventListener('click', () => {
     if (!state.selected) { toast('Selecione uma tecla ou um knob primeiro.'); return; }
@@ -512,12 +523,13 @@ function openContextMenu(x, y) {
     h('span', {}, label), shortcut ? h('kbd', {}, shortcut) : null);
   const testable = binding.kind === 'app' && tauri;
   const menu = $('#context-menu');
-  menu.replaceChildren(
+  menu.replaceChildren(...[
     item('Copiar', 'Ctrl+C', binding.kind === 'empty' || binding.kind === 'raw', copySelected),
     item('Colar', 'Ctrl+V', !state.clipboard, pasteSelected),
     item('Limpar', 'Del', binding.kind === 'empty', clearSelected),
     testable ? h('hr') : null,
-    testable ? item('Testar ação', '', false, () => testBinding(binding)) : null);
+    testable ? item('Testar ação', '', false, () => testBinding(binding)) : null
+  ].filter(Boolean));
   menu.hidden = false;
   menu.style.left = `${Math.min(x, innerWidth - menu.offsetWidth - 8)}px`;
   menu.style.top = `${Math.min(y, innerHeight - menu.offsetHeight - 8)}px`;
@@ -550,10 +562,14 @@ function renderKeyboardState() {
   const { mods, code } = keyboardTarget.value;
   for (const button of document.querySelectorAll('[data-mod]')) button.setAttribute('aria-pressed', String(Boolean(mods & Number(button.dataset.mod))));
   for (const button of document.querySelectorAll('[data-code]')) button.setAttribute('aria-pressed', String(code === Number(button.dataset.code)));
-  $('#keyboard-summary').replaceChildren(...kbdRow(mods, code, 'Nenhuma tecla'));
+  $('#keyboard-summary').replaceChildren(mods || code ? keycaps(mods, code) : h('span', { class: 'placeholder' }, 'Nenhuma tecla'));
 }
 function virtualKey(spec) {
-  const button = h('button', { type: 'button', class: 'virtual-key', 'aria-pressed': 'false' }, spec.label);
+  // Teclas com uma letra ou símbolo têm legenda grande; nomes como "Shift" vão menores, embaixo.
+  // Espaço e setas têm a legenda centralizada.
+  const word = [...spec.label].length > 1;
+  const centered = [0x2c, 0x4f, 0x50, 0x51, 0x52].includes(spec.code);
+  const button = h('button', { type: 'button', class: `virtual-key${word ? ' word' : ''}${centered ? ' centered' : ''}`, 'aria-pressed': 'false' }, h('span', { class: 'key-label' }, spec.label));
   button.style.setProperty('--span', spec.span);
   if (spec.mod !== undefined) {
     button.classList.add('modifier');
@@ -572,7 +588,11 @@ function virtualKey(spec) {
   return button;
 }
 function renderKeyboard() {
-  const top = h('div', { class: 'function-row' }, functionGroups.map(group => h('div', { class: 'function-group' }, group.map(virtualKey))));
+  // Grade de três colunas como num teclado completo: Esc e F1–F12 alinhados ao bloco principal,
+  // PrtSc/Scroll/Pause sobre a navegação e os indicadores sobre o teclado numérico.
+  const functionMain = h('div', { class: 'function-row' }, functionGroups.slice(0, 4).map(group => h('div', { class: 'function-group' }, group.map(virtualKey))));
+  const functionNav = h('div', { class: 'function-group' }, functionGroups[4].map(virtualKey));
+  const indicators = h('div', { class: 'keyboard-leds', 'aria-hidden': 'true' }, ['Num', 'Caps', 'Scroll'].map(name => h('span', {}, h('i'), name)));
   const main = h('div', { class: 'keyboard-main' }, mainRows.map(row => h('div', { class: 'keyboard-row' }, row.map(virtualKey))));
   const navigation = h('div', { class: 'navigation-cluster' }, navigationRows.map((row, index) =>
     h('div', { class: index === 2 ? 'navigation-row arrow-up arrow-cluster' : 'navigation-row' }, row.map(virtualKey))));
@@ -582,7 +602,7 @@ function renderKeyboard() {
     if (key.wide) button.classList.add('span-two');
     return button;
   }));
-  $('#virtual-keyboard').replaceChildren(top, h('div', { class: 'keyboard-columns' }, main, navigation, numpad));
+  $('#virtual-keyboard').replaceChildren(functionMain, functionNav, indicators, main, navigation, numpad);
 }
 
 // Comunicação com o dispositivo.

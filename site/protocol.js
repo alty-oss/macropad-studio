@@ -24,7 +24,7 @@ export const mainRows = [
   [K('Tab', 0x2b, 1.5), ...letters('QWERTYUIOP'), K('[', 0x2f), K(']', 0x30), K('\\', 0x31, 1.5)],
   [K('Caps', 0x39, 1.75), ...letters('ASDFGHJKL'), K(';', 0x33), K("'", 0x34), K('Enter', 0x28, 2.25)],
   [M('Shift', 2, 2.25), ...letters('ZXCVBNM'), K(',', 0x36), K('.', 0x37), K('/', 0x38), M('Shift D', 0x20, 2.75)],
-  [M('Ctrl', 1, 1.5), M('Win', 8, 1.25), M('Alt', 4, 1.25), K('Espaço', 0x2c, 6), M('AltGr', 0x40, 1.25), M('Win D', 0x80, 1.25), K('Menu', 0x65, 1.25), M('Ctrl D', 0x10, 1.5)]
+  [M('Ctrl', 1, 1.25), M('Win', 8, 1.25), M('Alt', 4, 1.25), K('Espaço', 0x2c, 6.25), M('AltGr', 0x40, 1.25), M('Win D', 0x80, 1.25), K('Menu', 0x65, 1.25), M('Ctrl D', 0x10, 1.25)]
 ];
 export const navigationRows = [
   [K('Ins', 0x49), K('Home', 0x4a), K('PgUp', 0x4b)],
