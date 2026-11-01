@@ -17,7 +17,17 @@ bun install
 bun run build:css
 ```
 
-Durante a edição, `bun run watch:css` recompila o CSS quando os arquivos em `site/` mudarem. `site/tailwind.input.css` contém as cores, estilos globais e utilitários Tailwind sem Preflight; `site/styles.css` guarda o desenho da prévia física e do teclado QWERTY.
+`site/tailwind.input.css` contém as cores, estilos globais e utilitários Tailwind sem Preflight; `site/styles.css` guarda o desenho da prévia física e do teclado QWERTY.
+
+## Desenvolvimento com atualização automática
+
+Depois de `bun install`, execute:
+
+```powershell
+bun run dev
+```
+
+Esse comando recompila o Tailwind ao salvar e atualiza o navegador automaticamente. Mudanças em CSS trocam as folhas de estilo sem recarregar a página, preservando a conexão com o macropad. Mudanças em HTML, JavaScript ou no servidor recarregam a página; nesse caso, pode ser necessário reconectar o dispositivo. Use `Ctrl+C` para parar os dois processos. O comando `bun run start` continua servindo a versão local sem ferramentas de desenvolvimento.
 
 ## Organização
 

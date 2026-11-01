@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "build:css": "tailwindcss -i ./site/tailwind.input.css -o ./site/tailwind.css --minify",
-    "watch:css": "tailwindcss -i ./site/tailwind.input.css -o ./site/tailwind.css --watch",
+    "watch:css": "tailwindcss -i ./site/tailwind.input.css -o ./site/tailwind.css --watch=always --minify",
+    "dev": "bun server/dev.js",
     "start": "bun server/serve.js",
     "test": "bun tests/test-protocol.cjs"
   },
