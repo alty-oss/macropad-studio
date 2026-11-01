@@ -1,50 +1,52 @@
-# Configurador local do teclado DIY
+# Macropad Studio
 
-Configurador local para os macropads CH57x identificados como USB `1189:8840`, incluindo o modelo de 12 teclas e 3 controles.
+Configurador para Windows dos macropads CH57x identificados como USB `1189:8840`, incluindo o modelo de 12 teclas e 3 knobs. É um app Tauri: a janela configura o dispositivo e o processo fica na bandeja executando as ações do app.
 
-## Abrir localmente
+## Dois tipos de ação
 
-Com [Bun](https://bun.sh/) instalado, no PowerShell e dentro desta pasta, execute:
+- **Gravadas no macropad**: atalho de teclado, multimídia e "Sem ação". Ficam na memória do dispositivo e funcionam em qualquer computador, mesmo sem o app.
+- **Executadas pelo app** (marcadas com *App*): abrir arquivo, pasta ou programa, abrir site, digitar texto e multi-ação (várias etapas, com atalhos e pausas). O app grava no slot uma **tecla virtual** e associa a ela as etapas configuradas.
 
-```powershell
-bun run start
-```
+### Teclas virtuais
 
-O CSS compilado já acompanha o projeto. Para editar a interface com Tailwind, instale as dependências e gere novamente o arquivo estático:
+O descritor HID do teclado aceita usos de `0x00` a `0xFF`, então o macropad pode enviar F13–F24 (`0x68`–`0x73`), teclas que o Windows reconhece mas que nenhum teclado comum tem. Cada par (camada, slot) recebe um código fixo de F13–F24, combinado com Ctrl ou Shift, do lado esquerdo ou direito, quando os 12 códigos simples se esgotam (`virtualCode` em [site/protocol.js](site/protocol.js)). Alt e Win ficam de fora porque, sozinhos, abrem menus.
+
+Um gancho de teclado de baixo nível ([src-tauri/src/hook.rs](src-tauri/src/hook.rs)) reconhece esses códigos, impede que cheguem aos outros programas e envia a ação ao executor ([src-tauri/src/actions.rs](src-tauri/src/actions.rs)). Por isso o app precisa estar aberto, mesmo que só na bandeja. As etapas ficam em `%APPDATA%\com.macropad.studio\config.json`.
+
+## Desenvolvimento
+
+Requisitos: [Bun](https://bun.sh/), Rust (`rustup`) e Visual Studio Build Tools com a carga de trabalho C++. O WebView2 já vem no Windows 10/11.
 
 ```powershell
 bun install
-bun run build:css
+bun run dev      # abre o app com recarga automática da interface
+bun run build    # gera o instalador em src-tauri\target\release\bundle\nsis
+bun run test     # verifica o protocolo sem conectar o macropad
 ```
 
-`site/tailwind.input.css` contém as cores, estilos globais e utilitários Tailwind sem Preflight; `site/styles.css` guarda o desenho da prévia física e do teclado QWERTY.
-
-## Desenvolvimento com atualização automática
-
-Depois de `bun install`, execute:
-
-```powershell
-bun run dev
-```
-
-Esse comando recompila o Tailwind ao salvar e atualiza o navegador automaticamente. Mudanças em CSS trocam as folhas de estilo sem recarregar a página, preservando a conexão com o macropad. Mudanças em HTML, JavaScript ou no servidor recarregam a página; nesse caso, pode ser necessário reconectar o dispositivo. Use `Ctrl+C` para parar os dois processos. O comando `bun run start` continua servindo a versão local sem ferramentas de desenvolvimento.
+`bun run web` serve só a interface em `http://localhost:8000` para o Chrome/Edge, usando WebHID. Nesse modo, as ações do app ficam indisponíveis.
 
 ## Organização
 
-- `site/`: página, JavaScript do navegador, CSS próprio e CSS compilado do Tailwind.
-- `server/`: servidor Bun que publica apenas os arquivos necessários em `localhost`.
-- `tests/`: verificação local do protocolo e da correspondência entre JavaScript e HTML.
+- `site/`: interface (HTML, CSS e módulos JavaScript, sem etapa de build).
+  - `protocol.js`: comandos do dispositivo, tabelas de teclas e teclas virtuais.
+  - `transport.js`: troca de relatórios HID, via Rust no app ou via WebHID no navegador.
+  - `app.js`: editor (pré-visualização, biblioteca de ações, propriedades).
+- `src-tauri/`: app nativo.
+  - `device.rs`: abre a interface de configuração (página `0xFF00`) com `hidapi`.
+  - `hook.rs` e `actions.rs`: teclas virtuais e executor das etapas.
+  - `main.rs`: comandos, bandeja, inicialização com o Windows e instância única.
+- `server/serve.js`: servidor local usado por `bun run dev` e `bun run web`.
+- `tests/`: verificação do protocolo e da correspondência entre JavaScript e HTML.
 
-Para verificar o protocolo sem conectar o macropad, execute `bun run test`.
+## Uso
 
-Depois abra `http://localhost:8000` no **Google Chrome** ou **Microsoft Edge**. Não abra o arquivo com duplo clique: o WebHID requer um contexto seguro, e `localhost` atende a isso.
+1. Conecte o macropad. O app o detecta sozinho e lê a camada ativa.
+2. Arraste uma ação da lista à direita até uma tecla ou knob, ou selecione o controle e clique na ação. Os giros e o pressionamento de cada knob ficam abaixo da pré-visualização.
+3. Ajuste os parâmetros no painel de propriedades. Em atalhos, clique no campo e pressione a combinação; para Win ou Alt+Tab, use o teclado virtual.
+4. Clique em **Gravar no dispositivo**. O app grava, lê o dispositivo de novo e confirma cada controle.
 
-1. Clique em **Conectar dispositivo** e escolha **USB Composite Device**.
-2. Clique numa tecla ou na superfície de uma rodinha para configurar seu pressionamento. As ações de giro ficam nos controles abaixo da pré-visualização. Um modal abrirá com a ação selecionada.
-3. Escolha **Teclado**, **Mídia** ou **Sem ação**. Para um atalho, clique em Ctrl, Shift, Alt ou Win diretamente no teclado QWERTY e depois na tecla principal. O teclado virtual inclui teclas de função, pontuação, navegação e bloco numérico.
-4. Clique em **Concluir** para preparar a mudança ou **Cancelar** para descartá-la. Use **Gravar** na página principal para salvar as alterações no macropad. A página lê o dispositivo novamente e confirma os registros aplicados.
-
-É possível preparar alterações em mais de uma camada antes de gravar. A leitura manual de uma camada pede confirmação antes de descartar edições pendentes nela. Macros existentes com vários passos e outras ações que este editor não representa são mantidas enquanto você não substitui aquele controle.
+Clique com o botão direito num controle para copiar, colar, limpar ou testar. Arrastar uma tecla sobre outra troca as ações das duas. Fechar a janela mantém o app na bandeja; para encerrar, use **Sair** no menu do ícone.
 
 ## Ordem física das teclas
 
@@ -59,10 +61,6 @@ O firmware numera as teclas por coluna, de baixo para cima. A correspondência d
 
 Essa ordem foi confirmada no aparelho: gravar nos slots 1, 2 e 3 afetou as três teclas inferiores da coluna esquerda.
 
-## Pré-visualização
-
-A carcaça usa um contorno SVG único baseado na foto do aparelho, com recorte côncavo sob o knob grande, cabo USB, quatro indicadores luminosos e quatro parafusos. Teclas e rodinhas são elementos HTML interativos posicionados proporcionalmente sobre esse contorno. As teclas permanecem visualmente sem legendas, como no aparelho; o atalho de cada uma aparece no painel de seleção, no modal e na dica ao passar o mouse.
-
 ## Limite importante
 
-O app só envia os comandos documentados de leitura e gravação de atalhos (`0xFA`/`0xFB`/`0xFE`), além dos delimitadores de gravação. Ele não contém comandos de firmware, reset de fábrica ou alteração do modelo do teclado. O desenho assume a orientação física mostrada na referência; confirme os sentidos das rodinhas com um teste no seu aparelho.
+O app só envia os comandos documentados de leitura e gravação de atalhos (`0xFA`/`0xFB`/`0xFE`), além dos delimitadores de gravação. Ele não contém comandos de firmware, reset de fábrica ou alteração do modelo do teclado. A camada ativa é escolhida no próprio macropad; o app não consegue trocá-la.

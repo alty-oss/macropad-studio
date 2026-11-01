@@ -5,7 +5,8 @@ const assets = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
   ['/index.html', ['index.html', 'text/html; charset=utf-8']],
   ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
-  ['/tailwind.css', ['tailwind.css', 'text/css; charset=utf-8']],
+  ['/protocol.js', ['protocol.js', 'text/javascript; charset=utf-8']],
+  ['/transport.js', ['transport.js', 'text/javascript; charset=utf-8']],
   ['/styles.css', ['styles.css', 'text/css; charset=utf-8']],
 ]);
 
@@ -27,7 +28,6 @@ if (dev) {
   if (previous) broadcast('reload');
   const watcher = watch(new URL('../site/', import.meta.url), (_, filename) => {
     const name = String(filename || '').replaceAll('\\', '/');
-    if (name.endsWith('tailwind.input.css')) return;
     if (name.endsWith('.css')) broadcast('css');
     else if (name.endsWith('.html') || name.endsWith('.js')) broadcast('reload');
   });

@@ -3,14 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:css": "tailwindcss -i ./site/tailwind.input.css -o ./site/tailwind.css --minify",
-    "watch:css": "tailwindcss -i ./site/tailwind.input.css -o ./site/tailwind.css --watch=always --minify",
-    "dev": "bun server/dev.js",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "web": "bun --hot server/serve.js --dev",
     "start": "bun server/serve.js",
-    "test": "bun tests/test-protocol.cjs"
+    "icons": "tauri icon src-tauri/app-icon.svg",
+    "test": "bun tests/test-protocol.js"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4",
-    "tailwindcss": "^4"
+    "@tauri-apps/cli": "^2"
   }
 }
