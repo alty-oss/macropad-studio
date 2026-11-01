@@ -1,0 +1,15 @@
+{
+  "name": "macropad-studio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:css": "tailwindcss -i ./site/tailwind.input.css -o ./site/tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./site/tailwind.input.css -o ./site/tailwind.css --watch",
+    "start": "bun server/serve.js",
+    "test": "bun tests/test-protocol.cjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4",
+    "tailwindcss": "^4"
+  }
+}

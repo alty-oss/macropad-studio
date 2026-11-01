@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101012">
+  <meta name="description" content="Configure as teclas e os controles do seu macropad USB pelo navegador.">
+  <title>Macropad Studio · Configurador local</title>
+  <link rel="stylesheet" href="tailwind.css">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div class="min-h-screen">
+    <header class="flex min-h-[72px] items-center justify-between gap-5 border-b border-app-line-soft px-[clamp(20px,4vw,54px)] max-[620px]:items-start max-[620px]:px-[18px] max-[620px]:py-[14px]">
+      <div class="flex items-center gap-[11px] text-[15px] tracking-[-.03em]"><span class="grid h-[29px] w-[29px] place-items-center rounded-[7px] border border-[#665a4b] text-[17px] text-app-accent" aria-hidden="true">▦</span><span>Macropad <strong class="font-[650]">Studio</strong></span></div>
+      <div class="flex items-center gap-3 max-[620px]:flex-col max-[620px]:items-end max-[620px]:gap-2"><span id="connection-indicator" class="group inline-flex items-center gap-2 whitespace-nowrap text-xs text-app-muted"><span class="inline-block h-[7px] w-[7px] rounded-full bg-[#77777b] group-[.connected]:bg-app-positive"></span>Desconectado</span><button id="connect" class="min-h-[38px] whitespace-nowrap rounded-[7px] border border-transparent bg-app-accent px-[14px] py-2 font-semibold text-app-accent-ink transition-colors hover:enabled:bg-[#e6c9a3] max-[620px]:min-h-[34px] max-[620px]:text-[11px]" type="button">Conectar dispositivo</button></div>
+    </header>
+
+    <main class="mx-auto max-w-[1440px] px-[clamp(20px,4vw,54px)] pb-[30px] pt-[42px] max-[620px]:px-[14px] max-[620px]:py-7">
+      <section class="mb-[30px] flex items-end justify-between gap-6 max-[1050px]:flex-col max-[1050px]:items-start max-[620px]:gap-[18px]" aria-labelledby="page-title">
+        <div><p class="mb-2 mt-0 text-[10px] font-bold tracking-[.16em] text-app-accent">CONFIGURADOR LOCAL / USB</p><h1 id="page-title" class="m-0 text-[clamp(27px,3vw,38px)] font-[590] leading-[1.15] tracking-[-.055em]">Configure do seu jeito.</h1><p class="mb-0 mt-[11px] leading-[1.5] text-app-muted">Clique numa tecla ou ação da rodinha para abrir o editor e escolher a combinação no teclado virtual.</p></div>
+        <div class="flex items-center gap-3 max-[620px]:flex-wrap"><label class="flex items-center gap-[9px] text-xs text-app-muted">Camada <select id="layer" class="min-h-[38px] rounded-[7px] border border-app-line bg-app-surface-2 px-[10px] py-[7px] text-app-text" disabled><option value="1">01</option><option value="2">02</option><option value="3">03</option></select></label><button id="read" class="min-h-[38px] whitespace-nowrap rounded-[7px] border border-app-line bg-app-surface-2 px-[14px] py-2 font-semibold text-app-text transition-colors hover:enabled:bg-app-raised" type="button" disabled>Ler dispositivo</button><button id="save" class="min-h-[38px] whitespace-nowrap rounded-[7px] border border-transparent bg-app-accent px-[14px] py-2 font-semibold text-app-accent-ink transition-colors hover:enabled:bg-[#e6c9a3]" type="button" disabled>Gravar <span id="save-count"></span></button></div>
+      </section>
+
+      <div class="grid items-start gap-[18px] min-[1051px]:grid-cols-[minmax(0,1fr)_minmax(270px,350px)]">
+        <section class="min-w-0 rounded-xl border border-app-line-soft bg-app-surface p-6 max-[620px]:p-4" aria-labelledby="device-heading">
+          <div class="flex items-center justify-between gap-4"><div><p class="mb-2 mt-0 text-[10px] font-bold tracking-[.16em] text-app-accent">SEU DISPOSITIVO</p><h2 id="device-heading" class="m-0 text-lg font-semibold tracking-[-.035em]">Visão do macropad</h2></div><span id="layout-name" class="whitespace-nowrap rounded-[5px] border border-app-line px-[7px] py-[5px] text-[11px] text-app-muted max-[620px]:hidden">12 teclas · 3 controles</span></div>
+          <p class="mb-0 mt-[9px] text-xs leading-[1.45] text-app-muted">Clique numa tecla ou numa rodinha para o pressionamento. Os giros ficam nos controles logo abaixo do desenho.</p>
+          <div class="device-stage">
+            <div class="device-body" aria-label="Representação interativa do macropad">
+              <svg class="device-plate" viewBox="0 0 1080 1360" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                <defs>
+                  <linearGradient id="case-metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4b4c4e"/><stop offset=".48" stop-color="#38393b"/><stop offset="1" stop-color="#28292b"/></linearGradient>
+                  <radialGradient id="screw-metal" cx=".3" cy=".25" r=".8"><stop stop-color="#f1eee7"/><stop offset=".43" stop-color="#a7a7a4"/><stop offset="1" stop-color="#57585a"/></radialGradient>
+                  <filter id="matte-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".6" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".055"/></feComponentTransfer><feComposite in2="SourceAlpha" operator="in"/></filter>
+                  <filter id="led-blur" x="-60%" y="-100%" width="220%" height="300%"><feGaussianBlur stdDeviation="9"/></filter>
+                </defs>
+                <path d="M0 340 H112" fill="none" stroke="#09090a" stroke-width="43" stroke-linecap="round"/>
+                <path d="M22 340 H103" fill="none" stroke="#1a1a1c" stroke-width="25" stroke-linecap="round"/>
+                <path id="case-outline" d="M116 43 C102 43 89 51 85 70 L58 1225 C55 1289 61 1320 112 1326 L660 1336 C702 1338 719 1321 720 1278 L720 581 C720 503 743 459 821 438 C899 416 996 412 1033 336 C1076 247 1064 153 1024 101 C984 47 924 42 850 42 Z" fill="url(#case-metal)" stroke="#171719" stroke-width="10" stroke-linejoin="round"/>
+                <use href="#case-outline" fill="#fff" stroke="none" filter="url(#matte-grain)"/>
+                <path d="M118 50 C105 52 96 61 93 79 L67 1226 C65 1286 67 1310 114 1316 L657 1326" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="3"/>
+                <g class="led-indicators"><rect x="321" y="421" width="21" height="31" rx="5"/><rect x="350" y="421" width="21" height="31" rx="5"/><rect x="379" y="421" width="21" height="31" rx="5"/><rect x="408" y="421" width="21" height="31" rx="5"/></g>
+                <g class="screw" transform="translate(696 140)"><circle r="18" fill="#262729"/><circle r="14" fill="url(#screw-metal)"/><path d="M-6 -3 L6 3 M-3 6 L3 -6"/></g>
+                <g class="screw" transform="translate(696 336)"><circle r="18" fill="#262729"/><circle r="14" fill="url(#screw-metal)"/><path d="M-6 -3 L6 3 M-3 6 L3 -6"/></g>
+                <g class="screw" transform="translate(94 1288)"><circle r="18" fill="#262729"/><circle r="14" fill="url(#screw-metal)"/><path d="M-6 -3 L6 3 M-3 6 L3 -6"/></g>
+                <g class="screw" transform="translate(665 1294)"><circle r="18" fill="#262729"/><circle r="14" fill="url(#screw-metal)"/><path d="M-6 -3 L6 3 M-3 6 L3 -6"/></g>
+              </svg>
+              <div id="knobs" class="device-knobs"></div>
+              <div id="keys" class="device-keys"></div>
+            </div>
+          </div>
+          <div id="knob-actions" class="knob-actions" aria-label="Ações de giro das rodinhas"></div>
+          <div class="device-foot group flex items-center gap-2 border-t border-app-line-soft pt-[17px] text-[11px] text-app-muted"><span class="inline-block h-[7px] w-[7px] rounded-full bg-[#77777b] group-[.connected]:bg-app-positive"></span><span id="device-status">Aguardando conexão com o macropad</span></div>
+          <p class="mb-0 mt-[10px] text-[11px] leading-[1.45] text-app-faint">A camada escolhida aqui é a que será editada. Para testar, confirme que a mesma camada está ativa no teclado.</p>
+        </section>
+
+        <section class="min-w-0 rounded-xl border border-app-line-soft bg-app-surface p-6 max-[620px]:p-4" aria-labelledby="selection-heading">
+          <p class="mb-2 mt-0 text-[10px] font-bold tracking-[.16em] text-app-accent">SELEÇÃO ATUAL</p>
+          <h2 id="selection-heading" class="m-0 text-lg font-semibold tracking-[-.035em]">Clique em uma tecla</h2>
+          <p class="mb-0 mt-[9px] text-xs leading-[1.45] text-app-muted">O editor abrirá com um teclado QWERTY completo para você montar o atalho visualmente.</p>
+          <div class="mt-7 flex flex-col items-start gap-[11px] rounded-[9px] border border-app-line bg-app-surface-2 p-[18px]"><span class="text-[10px] font-[650] tracking-[.1em] text-app-faint">ATRIBUIÇÃO</span><strong id="selection-value" class="text-base font-[580] leading-[1.35]">Nenhum controle selecionado</strong><button id="edit-selected" class="mt-[5px] min-h-[38px] w-full whitespace-nowrap rounded-[7px] border border-app-line bg-app-surface-2 px-[14px] py-2 font-semibold text-app-text transition-colors hover:enabled:bg-app-raised" type="button" disabled>Editar esta ação</button></div>
+          <div class="mt-6 border-t border-app-line-soft pt-[13px]"><p class="flex items-baseline gap-[11px] text-xs leading-[1.5] text-app-muted"><span class="font-mono text-[11px] text-app-accent">01</span> Escolha uma tecla ou rodinha no desenho.</p><p class="flex items-baseline gap-[11px] text-xs leading-[1.5] text-app-muted"><span class="font-mono text-[11px] text-app-accent">02</span> Clique nas teclas do modal para montar a combinação.</p><p class="flex items-baseline gap-[11px] text-xs leading-[1.5] text-app-muted"><span class="font-mono text-[11px] text-app-accent">03</span> Confirme a escolha e grave no macropad.</p></div>
+        </section>
+      </div>
+
+      <details class="mt-[18px] rounded-[9px] border border-app-line-soft bg-app-surface px-[18px]"><summary class="cursor-pointer py-4 text-xs text-app-muted">Registro de atividade</summary><div class="text-right"><button id="clear-log" class="border-0 bg-transparent p-[6px] text-[11px] text-app-muted" type="button">Limpar registro</button></div><output id="log" class="mb-4 block max-h-[180px] overflow-auto whitespace-pre-wrap rounded-md bg-[#111113] p-3 font-mono text-[11px] leading-[1.5] text-[#b9b9bd]" aria-live="polite">Pronto.</output></details>
+      <p class="mb-0 mt-[18px] text-[11px] text-app-faint">Funciona localmente no Chrome ou Edge. Os atalhos gravados ficam salvos no próprio dispositivo.</p>
+    </main>
+  </div>
+  <dialog id="editor-modal" class="w-[calc(100vw-28px)] max-w-[1180px] max-h-[calc(100dvh-28px)] flex-col rounded-[14px] border border-[#424246] bg-app-surface p-0 text-app-text shadow-[0_32px_90px_#0009] backdrop:bg-[#000b] backdrop:backdrop-blur-[3px] open:flex" aria-labelledby="editor-heading" aria-describedby="editor-description">
+    <div class="flex items-start justify-between gap-[18px] border-b border-app-line-soft px-7 pb-[19px] pt-6 max-[620px]:px-[17px] max-[620px]:pb-[14px] max-[620px]:pt-[17px]"><div><p class="mb-2 mt-0 text-[10px] font-bold tracking-[.16em] text-app-accent">EDITAR AÇÃO · CAMADA <span id="modal-layer">01</span></p><h2 id="editor-heading" class="m-0 text-[25px] font-semibold tracking-[-.04em] max-[620px]:text-xl">Selecione um controle</h2><p id="editor-description" class="mb-0 mt-[7px] text-xs text-app-muted">Escolha uma combinação no teclado abaixo.</p></div><div class="flex items-center gap-[14px]"><span id="slot-number" class="whitespace-nowrap rounded-[5px] border border-app-line px-[7px] py-[5px] text-[11px] text-app-muted">—</span><button id="close-editor" class="h-[31px] w-[31px] rounded-[7px] border border-app-line bg-app-surface-2 text-[21px] leading-none text-app-muted hover:bg-app-raised hover:text-app-text" type="button" aria-label="Cancelar e fechar">×</button></div></div>
+    <div class="overflow-auto px-7 pb-4 pt-[22px] max-[620px]:px-[14px] max-[620px]:py-4">
+      <div class="grid grid-cols-3 gap-[3px] rounded-lg border border-app-line bg-[#202023] p-[3px] min-[621px]:inline-grid min-[621px]:grid-cols-[repeat(3,minmax(105px,1fr))]" role="group" aria-label="Tipo de ação"><button class="min-h-[35px] rounded-[5px] border-0 bg-transparent text-xs text-app-muted aria-pressed:bg-[#383431] aria-pressed:text-app-accent" type="button" data-mode="key">Teclado</button><button class="min-h-[35px] rounded-[5px] border-0 bg-transparent text-xs text-app-muted aria-pressed:bg-[#383431] aria-pressed:text-app-accent" type="button" data-mode="media">Mídia</button><button class="min-h-[35px] rounded-[5px] border-0 bg-transparent text-xs text-app-muted aria-pressed:bg-[#383431] aria-pressed:text-app-accent" type="button" data-mode="empty">Sem ação</button></div>
+      <div id="key-editor" class="pt-[22px]"><div class="keyboard-intro"><span class="mb-[10px] block text-[10px] font-[650] tracking-[.11em] text-[#c7c7cc]">TECLADO QWERTY</span><p>Clique em Ctrl, Shift, Alt ou Win para combinar; depois escolha a tecla principal. Símbolos seguem o layout ativo do Windows.</p></div><div class="keyboard-scroll"><div id="virtual-keyboard" class="virtual-keyboard" aria-label="Teclado virtual completo"></div></div></div>
+      <div id="media-editor" class="pt-[22px]" hidden><label class="mb-[10px] block text-[10px] font-[650] tracking-[.11em] text-[#c7c7cc]" for="media-action">AÇÃO DE MÍDIA</label><select id="media-action" class="min-h-11 w-full max-w-[420px] rounded-[7px] border border-app-line bg-app-surface-2 px-[10px] py-[7px] text-app-text"></select></div>
+      <div id="empty-editor" class="pt-[22px]" hidden><p class="m-0 rounded-[7px] border border-dashed border-app-line p-[18px] text-xs text-app-muted">Este controle ficará sem ação depois da gravação.</p></div>
+      <div class="mt-5 flex items-center justify-between gap-3 border-t border-app-line pt-4 text-xs text-app-muted"><span>Combinação selecionada</span><strong id="binding-summary" class="text-right text-sm font-semibold text-app-text">—</strong></div>
+      <p id="editor-note" class="mb-0 mt-[10px] text-[11px] leading-[1.5] text-app-muted"></p>
+    </div>
+    <div class="flex items-center justify-between gap-[15px] border-t border-app-line-soft px-7 py-4 max-[620px]:flex-col max-[620px]:items-start max-[620px]:px-[15px] max-[620px]:py-3"><span class="text-[11px] text-app-faint">Concluir prepara a alteração. Gravar escreve no macropad.</span><div class="flex gap-2 max-[620px]:w-full"><button id="cancel-editor" class="min-h-[38px] whitespace-nowrap rounded-[7px] border border-app-line bg-app-surface-2 px-[14px] py-2 font-semibold text-app-text transition-colors hover:enabled:bg-app-raised max-[620px]:flex-1" type="button">Cancelar</button><button id="confirm-editor" class="min-h-[38px] whitespace-nowrap rounded-[7px] border border-transparent bg-app-accent px-[14px] py-2 font-semibold text-app-accent-ink transition-colors hover:enabled:bg-[#e6c9a3] max-[620px]:flex-1" type="button">Concluir</button></div></div>
+  </dialog>
+</body>
+</html>

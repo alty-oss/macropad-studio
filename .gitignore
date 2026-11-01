@@ -1,0 +1,26 @@
+# Dependências e caches locais
+node_modules/
+.bun/
+.cache/
+
+# Resultados temporários de testes
+coverage/
+playwright-report/
+test-results/
+*.log
+
+# Configuração local e segredos
+.env
+.env.*
+!.env.example
+
+# Arquivos do sistema e de editores
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*~
+
+# site/tailwind.css é intencionalmente versionado para uso offline.
