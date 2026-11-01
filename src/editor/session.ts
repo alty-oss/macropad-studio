@@ -90,6 +90,16 @@ export async function readCurrent() {
   finally { setBusy(false); }
 }
 
+// Lê as camadas que ainda não foram abertas, para exportar a configuração completa.
+export async function loadAllLayers() {
+  if (state.connection !== 'connected' || state.busy) return;
+  const pending = state.layers.flatMap((layer, index) => layer.loaded ? [] : [index + 1]);
+  if (!pending.length) return;
+  setBusy(true);
+  try { for (const number of pending) await readLayer(number); }
+  finally { setBusy(false); }
+}
+
 export async function switchLayer(number: number) {
   if (number === state.layer || state.busy) return;
   stopCapture();

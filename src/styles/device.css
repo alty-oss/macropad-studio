@@ -1,14 +1,28 @@
 /* Prévia física: medidas e texturas seguem o aparelho real. */
 /* O palco é um contêiner de tamanho: o aparelho é dimensionado pela área livre, sem depender de alturas em porcentagem. */
 .device-stage { flex: 1; min-height: 0; width: 100%; container-type: size; display: grid; place-items: center; }
-.device-body { position: relative; width: min(calc(100cqw - 80px), calc((100cqh - 44px) * 1080 / 1360), 445px); aspect-ratio: 1080 / 1360; container-type: inline-size; --u: 1cqw; filter: drop-shadow(0 18px 22px #0008); }
+/* O aparelho aparece deitado, girado 90° para a direita, com os knobs à direita. O quadro reserva
+   as medidas já giradas (--w é a largura do aparelho em pé, que vira a altura na tela); o corpo é
+   desenhado em pé e girado no centro do quadro. A sombra fica no quadro para continuar caindo para baixo. */
+.device-frame {
+  --w: min(calc((100cqw - 96px) * 1080 / 1360), calc(100cqh - 72px), 500px);
+  position: relative; width: calc(var(--w) * 1360 / 1080); height: var(--w);
+  filter: drop-shadow(0 18px 22px #0008);
+}
+.device-body { position: absolute; top: 50%; left: 50%; width: var(--w); aspect-ratio: 1080 / 1360; translate: -50% -50%; rotate: 90deg; container-type: inline-size; --u: 1cqw; }
+/* Teclas e knobs giram de volta: legendas em pé, luz vinda de cima e os botões das funções do knob
+   à esquerda, em cima e à direita na tela. */
+.device-body .keycap, .device-body .knob-unit { rotate: -90deg; }
 .device-plate { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .led-indicators { fill: #f2f1ee; opacity: .88; filter: drop-shadow(0 0 6px #fff8); }
 .device-knobs { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
 .knob-unit { position: absolute; width: 18.5%; aspect-ratio: 1; pointer-events: none; }
-.knob-unit:nth-child(1) { left: 7.4%; top: 5.7%; }
-.knob-unit:nth-child(2) { left: 37.9%; top: 5.7%; }
-.knob-unit:nth-child(3) { left: 69.1%; top: .7%; width: 29.6%; }
+/* Posições no desenho de 1080 × 1360 (aparelho em pé): os três centros ficam na mesma altura (y = 230),
+   que vira a mesma coluna com o aparelho deitado. O knob grande (centro x = 852) cabe inteiro no lóbulo
+   da carcaça, incluindo a lateral serrilhada, que aparece embaixo na tela, longe da borda e dos parafusos. */
+.knob-unit:nth-child(1) { left: 7.4%; top: 9.57%; }
+.knob-unit:nth-child(2) { left: 37.9%; top: 9.57%; }
+.knob-unit:nth-child(3) { left: 65.39%; top: 6.19%; width: 27%; }
 /* Knob visto de cima com leve inclinação: a face de alumínio escovado fica em cima e, abaixo dela,
    aparece a lateral serrilhada do cilindro (estrias verticais, escura nas bordas, clara no centro). */
 .knob-press { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 50%; background: transparent; pointer-events: auto; transition: transform var(--fast); }

@@ -79,6 +79,27 @@ fn pick_path(app: AppHandle, folder: bool) -> Option<String> {
     picked.map(|path| path.to_string())
 }
 
+const BACKUP_FILTER: &str = "Configuração do Macropad Studio";
+
+// Exporta a configuração: pergunta onde salvar e grava o JSON. false se o usuário cancelar.
+#[tauri::command(async)]
+fn backup_save(app: AppHandle, contents: String, file_name: String) -> Result<bool, String> {
+    let picked = app.dialog().file().add_filter(BACKUP_FILTER, &["json"]).set_file_name(file_name).blocking_save_file();
+    let Some(path) = picked else { return Ok(false) };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(path, contents).map_err(|e| format!("Não foi possível salvar o arquivo: {e}"))?;
+    Ok(true)
+}
+
+// Importa uma configuração: pergunta qual arquivo abrir e devolve o texto, ou None se cancelar.
+#[tauri::command(async)]
+fn backup_open(app: AppHandle) -> Result<Option<String>, String> {
+    let picked = app.dialog().file().add_filter(BACKUP_FILTER, &["json"]).blocking_pick_file();
+    let Some(path) = picked else { return Ok(None) };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    std::fs::read_to_string(path).map(Some).map_err(|e| format!("Não foi possível ler o arquivo: {e}"))
+}
+
 // Tipo do caminho de uma etapa "Abrir", para a interface avisar sobre erros de digitação.
 #[tauri::command]
 fn path_kind(path: String) -> &'static str {
@@ -225,6 +246,8 @@ fn main() {
             macro_test,
             pick_path,
             path_kind,
+            backup_save,
+            backup_open,
             autostart_get,
             autostart_set
         ])

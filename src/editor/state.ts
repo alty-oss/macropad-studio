@@ -41,7 +41,12 @@ export function controlInfo(slot: number): { name: string; part?: string } {
     const knob = Math.floor((slot - 16) / 3);
     return { name: `Knob ${knob + 1}`, part: knobParts[(slot - 16) % 3].name };
   }
-  const position = Array.from({ length: state.layout.keys }, (_, i) => keySlotForPosition(i, state.layout.keys)).indexOf(slot);
+  // A pré-visualização mostra o aparelho deitado (girado 90° para a direita): a linha r e a coluna c
+  // do aparelho em pé viram a coluna (linhas - 1 - r) e a linha c na tela. A numeração segue a
+  // ordem de leitura na tela, da esquerda para a direita e de cima para baixo.
+  const rows = Math.ceil(state.layout.keys / 3);
+  const index = Array.from({ length: state.layout.keys }, (_, i) => keySlotForPosition(i, state.layout.keys)).indexOf(slot);
+  const position = (index % 3) * rows + (rows - 1 - Math.floor(index / 3));
   return { name: `Tecla ${String(position + 1).padStart(2, '0')}` };
 }
 export function controlLabel(slot: number) {

@@ -38,6 +38,7 @@ src/                    interface (o WebView do app)
     keys.ts             nomes das teclas HID, layout do teclado virtual, modificadores e mídia
     protocol.ts         slots, teclas virtuais, codificação dos registros e os tipos Binding, Step e Macro
     transport.ts        troca de relatórios HID: Rust no app (@tauri-apps/api) ou WebHID no navegador
+    backup-file.ts      formato do arquivo exportado e validação na importação
   editor/               a tela do editor
     state.ts            estado: conexão, camadas (dispositivo e rascunhos) e seleção
     editing.ts          rascunhos, seleção, copiar e colar
@@ -48,6 +49,7 @@ src/                    interface (o WebView do app)
     shortcuts.ts        captura de atalhos e teclado virtual
     legend.ts           títulos, ícones e legendas impressas nas keycaps
     chrome.ts           tela de conexão, cabeçalho, faixa de aviso e rodapé
+    backup.ts           exportar e importar a configuração
     menu.ts, feedback.ts, settings.ts   menu flutuante, avisos e configurações
   lib/                  utilitários sem regra de negócio (dom.ts, icons.ts, text.ts)
   styles/               main.css importa um arquivo por área da tela
@@ -58,7 +60,7 @@ src-tauri/              app nativo (Rust)
   src/config.rs         macros salvas em %APPDATA%
   src/main.rs           comandos, bandeja, inicialização com o Windows e instância única
 scripts/dev-server.ts   servidor de desenvolvimento usado por `bun run dev` e `bun run web`
-tests/                  `bun test`: protocolo e correspondência entre os módulos e o HTML
+tests/                  `bun test`: protocolo, arquivo de configuração e correspondência entre os módulos e o HTML
 ```
 
 ## Uso
@@ -70,9 +72,13 @@ tests/                  `bun test`: protocolo e correspondência entre os módul
 
 Clique com o botão direito num controle para copiar, colar, limpar ou testar. Arrastar uma tecla sobre outra troca as ações das duas. Fechar a janela mantém o app na bandeja; para encerrar, use **Sair** no menu do ícone.
 
+Para fazer backup ou levar a configuração para outro computador, use o botão de arquivo no cabeçalho: **Exportar configuração** salva um `.json` com as ações das três camadas, incluindo as etapas das ações do app (com o macropad conectado, as camadas ainda não abertas são lidas antes). **Importar configuração** valida o arquivo e aplica as ações como alterações não gravadas; nada vai para o macropad até você clicar em **Gravar no dispositivo**. Ações existentes que o editor não representa ficam de fora da exportação.
+
 ## Ordem física das teclas
 
-O firmware numera as teclas por coluna, de baixo para cima. A correspondência da representação 3 × 4 é:
+A pré-visualização mostra o aparelho deitado, girado 90° para a direita: knobs na lateral direita (knob 1 em cima, o knob grande embaixo) e as teclas num bloco de 4 × 3. Os nomes "Tecla 01" a "Tecla 12" seguem a ordem de leitura nessa posição, da esquerda para a direita e de cima para baixo.
+
+O firmware numera as teclas por coluna, de baixo para cima, com o aparelho em pé (knobs em cima). A correspondência nessa posição é:
 
 | Linha física, de cima para baixo | Esquerda | Centro | Direita |
 | --- | ---: | ---: | ---: |

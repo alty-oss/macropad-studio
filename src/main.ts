@@ -3,13 +3,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Macro } from './device/protocol.ts';
 import { transport } from './device/transport.ts';
+import { exportConfig, importConfig } from './editor/backup.ts';
 import { flash, renderBoard } from './editor/board.ts';
 import { renderChrome, renderLayers } from './editor/chrome.ts';
 import { clearSelected, copySelected, deselect, pasteSelected } from './editor/editing.ts';
 import { log, toast } from './editor/feedback.ts';
 import { renderInspector } from './editor/inspector.ts';
 import { renderLibrary } from './editor/library.ts';
-import { closeContextMenu } from './editor/menu.ts';
+import { closeContextMenu, showMenu } from './editor/menu.ts';
 import { connect, onDeviceChange, readCurrent, save } from './editor/session.ts';
 import { openSettings, savedLegends, setLegends } from './editor/settings.ts';
 import { closeKeyboard, renderKeyboard } from './editor/shortcuts.ts';
@@ -30,6 +31,13 @@ function bindControls() {
   $('#offline').addEventListener('click', () => { state.offline = true; renderChrome(); });
   $('#read').addEventListener('click', readCurrent);
   $('#save').addEventListener('click', save);
+  $('#open-backup').addEventListener('click', event => {
+    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    showMenu(box.right - 220, box.bottom + 6, [
+      { label: 'Exportar configuração…', icon: 'download', action: exportConfig },
+      { label: 'Importar configuração…', icon: 'upload', action: importConfig }
+    ]);
+  });
   $('#open-settings').addEventListener('click', openSettings);
   $('#close-settings').addEventListener('click', () => $<HTMLDialogElement>('#settings-modal').close());
   $('#autostart').addEventListener('change', async event => {

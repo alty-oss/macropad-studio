@@ -8,11 +8,16 @@ import { controlPreview, renderInspector, renderInspectorHead } from './inspecto
 import { stopCapture } from './shortcuts.ts';
 import { bindingAt, layerData, state } from './state.ts';
 
-export function setDraft(slot: number, next: Binding, { keepBody = false } = {}) {
-  const layer = layerData();
+// Prepara o rascunho de um controle numa camada, sem redesenhar. Igual ao que está no dispositivo,
+// o rascunho é descartado.
+export function stageDraft(layerNumber: number, slot: number, next: Binding) {
+  const layer = layerData(layerNumber);
   const original = layer.records.get(slot) || { kind: 'empty' };
   if (equalBinding(original, next)) layer.drafts.delete(slot);
   else layer.drafts.set(slot, next);
+}
+export function setDraft(slot: number, next: Binding, { keepBody = false } = {}) {
+  stageDraft(state.layer, slot, next);
   renderBoard(); renderLayers(); renderChrome();
   if (keepBody) {
     // Os campos continuam no lugar (e com o foco); só o cabeçalho e a miniatura acompanham a edição.

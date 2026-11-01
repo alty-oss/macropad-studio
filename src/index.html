@@ -32,6 +32,7 @@
       <span id="sync-state" class="sync-state"></span>
       <button id="read" class="btn btn-icon" type="button" aria-label="Ler a camada do dispositivo" data-icon="refresh"></button>
       <button id="save" class="btn btn-primary" type="button"><span data-icon="download"></span><span id="save-label">Gravar no dispositivo</span></button>
+      <button id="open-backup" class="btn btn-icon" type="button" aria-label="Importar ou exportar configuração" aria-haspopup="menu" data-icon="archive"></button>
       <button id="open-settings" class="btn btn-icon" type="button" aria-label="Configurações" data-icon="settings"></button>
     </header>
     <div id="banner" class="banner" role="status" hidden><span data-icon="warning"></span><span id="banner-text"></span></div>
@@ -43,29 +44,32 @@
           <label class="toggle"><input id="legends" type="checkbox" checked><span>Legendas</span></label>
         </div>
         <div class="device-stage">
-          <div class="device-body">
-            <svg class="device-plate" viewBox="0 0 1080 1360" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-              <defs>
-                <linearGradient id="case-metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4b4c4e"/><stop offset=".48" stop-color="#38393b"/><stop offset="1" stop-color="#28292b"/></linearGradient>
-                <!-- Parafuso Phillips: rebaixo na carcaça, cabeça com luz vinda do alto à esquerda e fenda em cruz. -->
-                <radialGradient id="screw-head" cx=".36" cy=".3" r=".85"><stop stop-color="#f7f5f0"/><stop offset=".35" stop-color="#c3c2be"/><stop offset=".78" stop-color="#77787b"/><stop offset="1" stop-color="#4a4b4e"/></radialGradient>
-                <linearGradient id="screw-well" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0c0d0e"/><stop offset=".55" stop-color="#26272a"/><stop offset="1" stop-color="#5a5b5e"/></linearGradient>
-                <g id="screw-head-shape"><circle r="20" fill="url(#screw-well)"/><circle r="15.6" fill="#121314"/><circle r="14.6" fill="url(#screw-head)"/><circle r="14.1" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1"/></g>
-                <g id="screw-cross" stroke-linecap="round" fill="none"><path d="M-6.4 0H6.4M0 -6.4V6.4" transform="translate(.9 .9)" stroke="#f2f0ea" stroke-opacity=".55" stroke-width="4"/><path d="M-6.4 0H6.4M0 -6.4V6.4" stroke="#3a3b3e" stroke-width="4"/><path d="M-4.6 0H4.6M0 -4.6V4.6" stroke="#161719" stroke-width="1.8"/></g>
-                <ellipse id="screw-glint" cx="-5" cy="-6.5" rx="4.2" ry="2.2" transform="rotate(-35 -5 -6.5)" fill="#fff" fill-opacity=".55"/>
-                <filter id="matte-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".6" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".055"/></feComponentTransfer><feComposite in2="SourceAlpha" operator="in"/></filter>
-              </defs>
-              <path id="case-outline" d="M116 43 C102 43 89 51 85 70 L58 1225 C55 1289 61 1320 112 1326 L660 1336 C702 1338 719 1321 720 1278 L720 581 C720 503 743 459 821 438 C899 416 996 412 1033 336 C1076 247 1064 153 1024 101 C984 47 924 42 850 42 Z" fill="url(#case-metal)" stroke="#171719" stroke-width="10" stroke-linejoin="round"/>
-              <use href="#case-outline" fill="#fff" stroke="none" filter="url(#matte-grain)"/>
-              <path d="M118 50 C105 52 96 61 93 79 L67 1226 C65 1286 67 1310 114 1316 L657 1326" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="3"/>
-              <g class="led-indicators"><rect x="321" y="421" width="21" height="31" rx="5"/><rect x="350" y="421" width="21" height="31" rx="5"/><rect x="379" y="421" width="21" height="31" rx="5"/><rect x="408" y="421" width="21" height="31" rx="5"/></g>
-              <g class="screw" transform="translate(696 140)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(18)"/><use href="#screw-glint"/></g>
-              <g class="screw" transform="translate(696 336)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(-27)"/><use href="#screw-glint"/></g>
-              <g class="screw" transform="translate(94 1288)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(41)"/><use href="#screw-glint"/></g>
-              <g class="screw" transform="translate(665 1294)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(7)"/><use href="#screw-glint"/></g>
-            </svg>
-            <div id="knobs" class="device-knobs"></div>
-            <div id="keys" class="device-keys"></div>
+          <div class="device-frame">
+            <div class="device-body">
+              <svg class="device-plate" viewBox="0 0 1080 1360" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+                <defs>
+                  <linearGradient id="case-metal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4b4c4e"/><stop offset=".48" stop-color="#38393b"/><stop offset="1" stop-color="#28292b"/></linearGradient>
+                  <!-- Parafuso Phillips: rebaixo na carcaça, cabeça com luz vinda do alto à esquerda e fenda em cruz. -->
+                  <radialGradient id="screw-head" cx=".36" cy=".3" r=".85"><stop stop-color="#f7f5f0"/><stop offset=".35" stop-color="#c3c2be"/><stop offset=".78" stop-color="#77787b"/><stop offset="1" stop-color="#4a4b4e"/></radialGradient>
+                  <linearGradient id="screw-well" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0c0d0e"/><stop offset=".55" stop-color="#26272a"/><stop offset="1" stop-color="#5a5b5e"/></linearGradient>
+                  <g id="screw-head-shape"><circle r="20" fill="url(#screw-well)"/><circle r="15.6" fill="#121314"/><circle r="14.6" fill="url(#screw-head)"/><circle r="14.1" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1"/></g>
+                  <g id="screw-cross" stroke-linecap="round" fill="none"><path d="M-6.4 0H6.4M0 -6.4V6.4" transform="translate(.9 .9)" stroke="#f2f0ea" stroke-opacity=".55" stroke-width="4"/><path d="M-6.4 0H6.4M0 -6.4V6.4" stroke="#3a3b3e" stroke-width="4"/><path d="M-4.6 0H4.6M0 -4.6V4.6" stroke="#161719" stroke-width="1.8"/></g>
+                  <ellipse id="screw-glint" cx="-5" cy="-6.5" rx="4.2" ry="2.2" transform="rotate(-35 -5 -6.5)" fill="#fff" fill-opacity=".55"/>
+                  <filter id="matte-grain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".6" numOctaves="2" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".055"/></feComponentTransfer><feComposite in2="SourceAlpha" operator="in"/></filter>
+                </defs>
+                <path id="case-outline" d="M110 42 C82 42 62 62 62 90 L62 1286 C62 1314 80 1332 108 1332 L676 1332 C704 1332 720 1314 720 1286 L720 581 C720 503 743 459 821 438 C899 416 996 412 1033 336 C1076 247 1064 153 1024 101 C984 47 924 42 850 42 Z" fill="url(#case-metal)" stroke="#171719" stroke-width="10" stroke-linejoin="round"/>
+                <use href="#case-outline" fill="#fff" stroke="none" filter="url(#matte-grain)"/>
+                <path d="M112 50 C88 50 70 68 70 92 L70 1284 C70 1308 84 1324 108 1324 L674 1324" fill="none" stroke="#ffffff" stroke-opacity=".12" stroke-width="3"/>
+                <g class="led-indicators"><rect x="336" y="421" width="21" height="31" rx="5"/><rect x="365" y="421" width="21" height="31" rx="5"/><rect x="394" y="421" width="21" height="31" rx="5"/></g>
+                <g class="screw" transform="translate(102 84)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(-12)"/><use href="#screw-glint"/></g>
+                <g class="screw" transform="translate(696 140)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(18)"/><use href="#screw-glint"/></g>
+                <g class="screw" transform="translate(696 336)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(-27)"/><use href="#screw-glint"/></g>
+                <g class="screw" transform="translate(102 1290)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(41)"/><use href="#screw-glint"/></g>
+                <g class="screw" transform="translate(665 1294)"><use href="#screw-head-shape"/><use href="#screw-cross" transform="rotate(7)"/><use href="#screw-glint"/></g>
+              </svg>
+              <div id="knobs" class="device-knobs"></div>
+              <div id="keys" class="device-keys"></div>
+            </div>
           </div>
         </div>
       </section>
