@@ -24,7 +24,6 @@
   <div id="editor" class="app">
     <header class="titlebar">
       <div class="brand"><span class="brand-mark" data-icon="logo"></span>Macropad Studio</div>
-      <div id="device-chip" class="device-chip"><span class="status-dot"></span><span id="device-name">Desconectado</span></div>
       <div class="titlebar-group">
         <span class="titlebar-label" id="layer-label">Camada</span>
         <div id="layers" class="segmented" role="radiogroup" aria-labelledby="layer-label"></div>
@@ -69,7 +68,6 @@
             <div id="keys" class="device-keys"></div>
           </div>
         </div>
-        <div id="knob-actions" class="knob-actions" aria-label="Giro e pressionamento dos knobs"></div>
       </section>
 
       <section id="inspector" class="inspector" aria-labelledby="inspector-title">
@@ -80,10 +78,10 @@
       <aside class="library" aria-label="Ações">
         <div class="library-head">
           <h2>Ações</h2>
-          <label class="search"><span data-icon="search"></span><input id="action-search" type="search" placeholder="Buscar ação" autocomplete="off" spellcheck="false"></label>
+          <div class="search"><span data-icon="search"></span><input id="action-search" type="text" placeholder="Buscar ação" aria-label="Buscar ação" autocomplete="off" spellcheck="false"><kbd class="search-hint">Ctrl F</kbd><button id="clear-search" class="search-clear" type="button" aria-label="Limpar busca" data-icon="x" hidden></button></div>
+          <p id="library-context" class="library-context"></p>
         </div>
         <div id="action-list" class="action-list"></div>
-        <p id="library-note" class="library-note"></p>
       </aside>
     </main>
 

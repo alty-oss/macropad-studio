@@ -1,7 +1,7 @@
 import { transport } from './transport.js';
 import {
   media, mediaNames, keyNames, functionGroups, mainRows, navigationRows, numpadKeys, codeToHid, modifierCodes,
-  knobSlot, keySlotForPosition, virtualCode, comboLabel, stepNames, stepSummary, labelFor, equalBinding, appBindingError, decode, encode
+  knobSlot, knobParts, keySlotForPosition, virtualCode, comboLabel, stepNames, labelFor, equalBinding, appBindingError, decode, encode
 } from './protocol.js';
 
 const $ = selector => document.querySelector(selector);
@@ -24,6 +24,8 @@ const state = {
   macros: [],
   clipboard: null,
   collapsed: new Set(),
+  // Função de cada knob aberta por último (0 girar à esquerda, 1 pressionar, 2 girar à direita).
+  knobPart: [1, 1, 1],
   layers: Array.from({ length: 3 }, () => ({ records: new Map(), drafts: new Map(), loaded: false }))
 };
 
@@ -38,6 +40,8 @@ const icons = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.8h.01"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   bolt: '<path d="M13 3 5 13.5h6.5L10.5 21 19 10.5h-6.5z"/>',
+  file: '<path d="M14 3.5H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8.5z"/><path d="M14 3.5v5h5"/>',
+  app: '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9h17M7 6.8h.01M9.5 6.8h.01"/>',
   search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.4-4.4"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
@@ -86,23 +90,32 @@ function h(tag, props = {}, ...children) {
 const mediaIcons = new Map([[0xe9, 'volumeUp'], [0xea, 'volumeDown'], [0xe2, 'mute'], [0xcd, 'playPause'], [0xb5, 'next'], [0xb6, 'prev']]);
 const mediaShort = new Map([[0xe9, 'Vol +'], [0xea, 'Vol −'], [0xe2, 'Mudo'], [0xcd, 'Play'], [0xb5, 'Próx.'], [0xb6, 'Ant.']]);
 const stepIcons = { open: 'folder', website: 'globe', text: 'text', hotkey: 'keyboard', delay: 'clock' };
+// Em "Abrir", o ícone segue o caminho: programa, arquivo com extensão ou pasta.
+const stepIcon = step => step.type !== 'open' ? stepIcons[step.type]
+  : PROGRAM_PATH.test(step.path.trim()) ? 'app' : /\.[a-z0-9]{1,5}$/i.test(step.path.trim()) ? 'file' : 'folder';
 const newStep = type => ({
   open: { type, path: '', args: '' }, website: { type, url: '' }, text: { type, text: '' },
   hotkey: { type, mods: 0, code: null }, delay: { type, ms: 300 }
 })[type];
 const appAction = step => ({ kind: 'app', multi: false, steps: [newStep(step)] });
+// "is" reconhece a ação já atribuída ao controle selecionado, para destacá-la na lista.
+const isApp = type => binding => binding.kind === 'app' && !binding.multi && binding.steps[0]?.type === type;
 const library = [
-  { title: 'Teclado', items: [{ id: 'key', name: 'Atalho de teclado', description: 'Combinação gravada no macropad', icon: 'keyboard', make: () => ({ kind: 'key', mods: 0, code: null }) }] },
-  { title: 'Multimídia', items: [...media].map(([name, code]) => ({ id: `media-${code}`, name, icon: mediaIcons.get(code), make: () => ({ kind: 'media', media: code }) })) },
+  { title: 'Teclado', items: [{ id: 'key', name: 'Atalho de teclado', description: 'Combinação gravada no macropad', icon: 'keyboard', make: () => ({ kind: 'key', mods: 0, code: null }), is: binding => binding.kind === 'key' }] },
+  {
+    title: 'Multimídia', items: [...media].map(([name, code]) => ({
+      id: `media-${code}`, name, icon: mediaIcons.get(code), make: () => ({ kind: 'media', media: code }), is: binding => binding.kind === 'media' && binding.media === code
+    }))
+  },
   {
     title: 'Sistema', app: true, items: [
-      { id: 'open', name: 'Abrir', description: 'Arquivo, pasta ou programa', icon: 'folder', make: () => appAction('open') },
-      { id: 'website', name: 'Site', description: 'Abre no navegador padrão', icon: 'globe', make: () => appAction('website') },
-      { id: 'text', name: 'Digitar texto', description: 'Escreve um texto pronto', icon: 'text', make: () => appAction('text') },
-      { id: 'multi', name: 'Multi-ação', description: 'Várias etapas em sequência', icon: 'multi', make: () => ({ kind: 'app', multi: true, steps: [] }) }
+      { id: 'open', name: 'Abrir', description: 'Arquivo, pasta ou programa', icon: 'folder', make: () => appAction('open'), is: isApp('open') },
+      { id: 'website', name: 'Site', description: 'Abre no navegador padrão', icon: 'globe', make: () => appAction('website'), is: isApp('website') },
+      { id: 'text', name: 'Digitar texto', description: 'Escreve um texto pronto', icon: 'text', make: () => appAction('text'), is: isApp('text') },
+      { id: 'multi', name: 'Multi-ação', description: 'Várias etapas em sequência', icon: 'multi', make: () => ({ kind: 'app', multi: true, steps: [] }), is: binding => binding.kind === 'app' && binding.multi }
     ]
   },
-  { title: 'Geral', items: [{ id: 'empty', name: 'Sem ação', description: 'Limpa o controle', icon: 'empty', make: () => ({ kind: 'empty' }) }] }
+  { title: 'Geral', items: [{ id: 'empty', name: 'Sem ação', description: 'Limpa o controle', icon: 'empty', make: () => ({ kind: 'empty' }), is: binding => binding.kind === 'empty' }] }
 ];
 const actionById = new Map(library.flatMap(group => group.items.map(item => [item.id, item])));
 
@@ -116,7 +129,7 @@ const normalize = text => text.normalize('NFD').replace(/\p{Diacritic}/gu, '').t
 function controlInfo(slot) {
   if (slot >= 16) {
     const knob = Math.floor((slot - 16) / 3);
-    return { name: `Knob ${knob + 1}`, part: ['Girar à direita', 'Pressionar', 'Girar à esquerda'][(slot - 16) % 3] };
+    return { name: `Knob ${knob + 1}`, part: knobParts[(slot - 16) % 3].name };
   }
   const position = Array.from({ length: state.layout.keys }, (_, i) => keySlotForPosition(i, state.layout.keys)).indexOf(slot);
   return { name: `Tecla ${String(position + 1).padStart(2, '0')}` };
@@ -132,25 +145,45 @@ function bindingMeta(binding) {
   if (binding.kind === 'app') {
     const type = binding.steps[0]?.type;
     return binding.multi ? { title: 'Multi-ação', icon: 'multi', where: 'app' }
-      : { title: stepNames[type] || 'Ação do app', icon: stepIcons[type] || 'multi', where: 'app' };
+      : { title: stepNames[type] || 'Ação do app', icon: binding.steps[0] ? stepIcon(binding.steps[0]) : 'multi', where: 'app' };
   }
   if (binding.kind === 'raw') return { title: 'Ação existente', icon: 'warning', where: 'device' };
   return { title: 'Sem ação', icon: 'empty', where: null };
+}
+// Nome curto para caber numa tecla: pasta ou arquivo sem extensão de executável, domínio sem "www." nem sufixo.
+function shortName(step) {
+  if (step.type === 'open') {
+    const name = step.path.split(/[\\/]/).filter(Boolean).pop() || '';
+    return name.replace(/\.(exe|lnk|bat|cmd|url)$/i, '') || 'Abrir';
+  }
+  if (step.type === 'website') {
+    try { return new URL(step.url).hostname.replace(/^www\./, '').split('.')[0] || 'Site'; }
+    catch { return 'Site'; }
+  }
+  if (step.type === 'hotkey') return comboLabel(step.mods, step.code).join('+') || 'Atalho';
+  return stepNames[step.type];
 }
 // Legenda como numa tecla impressa: ícone ou modificadores em cima, texto principal embaixo.
 function legendFor(binding) {
   if (binding.kind === 'key') {
     const parts = comboLabel(binding.mods, binding.code);
-    return [null, parts.pop() || '', parts.join(' ')];
+    return { text: parts.pop() || '', mods: parts.join(' ') };
   }
-  if (binding.kind === 'media') return [mediaIcons.get(binding.media), mediaShort.get(binding.media)];
+  if (binding.kind === 'media') return { icon: mediaIcons.get(binding.media), text: mediaShort.get(binding.media) };
   if (binding.kind === 'app') {
-    if (binding.multi) return ['multi', plural(binding.steps.length, 'etapa', 'etapas')];
+    if (binding.multi) return { icon: 'multi', text: plural(binding.steps.length, 'etapa', 'etapas') };
     const step = binding.steps[0];
-    return step ? [stepIcons[step.type], stepSummary(step)] : ['warning', 'Macro'];
+    return step ? { icon: stepIcon(step), text: shortName(step) } : { icon: 'warning', text: 'Macro' };
   }
-  if (binding.kind === 'raw') return ['warning', 'Existente'];
-  return [null, ''];
+  if (binding.kind === 'raw') return { icon: 'warning', text: 'Existente' };
+  return { text: '' };
+}
+// A fonte diminui com a palavra mais longa. Textos com espaço quebram em até duas linhas, só entre
+// palavras; uma palavra que ainda não couber termina em reticências.
+function legendClass(text) {
+  const longest = Math.max(...text.split(/\s+/).map(word => [...word].length));
+  const size = longest <= 3 ? 'lg' : longest <= 6 ? 'md' : longest <= 8 ? 'sm' : 'xs';
+  return `legend-${size}${/\s/.test(text.trim()) ? ' legend-wrap' : ''}`;
 }
 
 function log(message) {
@@ -188,24 +221,39 @@ function setDraft(slot, next, { keepBody = false } = {}) {
   if (equalBinding(original, next)) layer.drafts.delete(slot);
   else layer.drafts.set(slot, next);
   renderBoard(); renderLayers(); renderChrome();
-  if (keepBody) renderInspectorHead();
-  else renderInspector();
+  if (keepBody) {
+    // Os campos continuam no lugar (e com o foco); só o cabeçalho e a miniatura acompanham a edição.
+    renderInspectorHead();
+    document.querySelector('#inspector-body .control-preview')?.replaceWith(controlPreview(slot));
+  } else renderInspector();
 }
 function assign(slot, binding) {
   stopCapture();
-  state.selected = slot;
+  setSelected(slot);
   setDraft(slot, binding);
 }
 function swap(from, to) {
   const a = bindingAt(from), b = bindingAt(to);
   if (a.kind === 'raw' || b.kind === 'raw') { toast('Ações existentes do dispositivo não podem ser movidas.', 'error'); return; }
-  state.selected = to;
+  setSelected(to);
   setDraft(from, structuredClone(b));
   setDraft(to, structuredClone(a));
 }
+// Selecionar uma função de knob também a torna a aba aberta daquele knob.
+function setSelected(slot) {
+  state.selected = slot;
+  if (slot >= 16) state.knobPart[Math.floor((slot - 16) / 3)] = (slot - 16) % 3;
+}
 function select(slot) {
   stopCapture();
-  state.selected = slot;
+  setSelected(slot);
+  renderBoard();
+  renderInspector();
+}
+function deselect() {
+  if (!state.selected) return;
+  stopCapture();
+  state.selected = null;
   renderBoard();
   renderInspector();
 }
@@ -245,33 +293,36 @@ function controlButton(slot, className, ...content) {
   return button;
 }
 function renderBoard() {
-  const focused = document.activeElement?.dataset?.slot ? `.${document.activeElement.classList[0]}[data-slot="${document.activeElement.dataset.slot}"]` : null;
-  const knobs = [], strip = [], keys = [];
+  const active = document.activeElement?.dataset ?? {};
+  const focused = active.knob ? `.knob-press[data-knob="${active.knob}"]` : active.slot ? `.keycap[data-slot="${active.slot}"]` : null;
+  const knobs = [], keys = [];
   for (let i = 0; i < state.layout.knobs; i++) {
-    knobs.push(h('div', { class: 'knob-unit' }, controlButton(knobSlot(i, 1), 'knob-press', h('span', { class: 'knob-indicator' }))));
-    // O sentido físico deste modelo é inverso à ordem numérica dos slots.
-    strip.push(h('div', { class: 'knob-group' }, h('span', { class: 'knob-group-label' }, `Knob ${i + 1}`), h('div', { class: 'knob-parts' },
-      controlButton(knobSlot(i, 2), 'knob-part', icon('rotateLeft')),
-      controlButton(knobSlot(i, 1), 'knob-part', icon('press')),
-      controlButton(knobSlot(i, 0), 'knob-part', icon('rotateRight')))));
+    // O knob abre na função usada por último; selecionado, mostra os botões das três funções.
+    const slots = [0, 1, 2].map(action => knobSlot(i, action));
+    const button = controlButton(knobSlot(i, state.knobPart[i]), 'knob-press', h('span', { class: 'knob-indicator' }));
+    button.dataset.knob = String(i);
+    button.setAttribute('aria-label', `Knob ${i + 1}`);
+    button.classList.toggle('selected', slots.includes(state.selected));
+    button.classList.toggle('dirty', slots.some(slot => layerData().drafts.has(slot)));
+    knobs.push(h('div', { class: 'knob-unit' }, button, slots.includes(state.selected) ? knobPicker(i) : null));
   }
   for (let i = 0; i < state.layout.keys; i++) {
     const slot = keySlotForPosition(i, state.layout.keys);
     if (!slot) continue;
-    const [legendIcon, legendText, legendMods] = legendFor(bindingAt(slot));
+    const legend = legendFor(bindingAt(slot));
     keys.push(controlButton(slot, 'keycap', h('span', { class: 'keycap-legend' },
-      legendIcon ? icon(legendIcon) : null,
-      legendMods ? h('small', {}, legendMods) : null,
-      legendText ? h('span', {}, legendText) : null)));
+      legend.icon ? icon(legend.icon) : null,
+      legend.mods ? h('small', {}, legend.mods) : null,
+      legend.text ? h('span', { class: legendClass(legend.text) }, legend.text) : null)));
   }
   $('#knobs').replaceChildren(...knobs);
-  $('#knob-actions').replaceChildren(...strip);
   $('#keys').replaceChildren(...keys);
   $('#layout-name').textContent = `${state.layout.keys} teclas · ${state.layout.knobs} knobs`;
   if (focused) document.querySelector(focused)?.focus();
 }
 function flash(slot) {
-  for (const element of document.querySelectorAll(`[data-slot="${slot}"]`)) {
+  const target = slot >= 16 ? `.knob-press[data-knob="${Math.floor((slot - 16) / 3)}"]` : `.keycap[data-slot="${slot}"]`;
+  for (const element of document.querySelectorAll(target)) {
     element.classList.add('pressed');
     setTimeout(() => element.classList.remove('pressed'), 220);
   }
@@ -303,8 +354,6 @@ function renderChrome() {
     ? 'Ligue o macropad ao computador pelo cabo USB. O Macropad Studio detecta o dispositivo automaticamente.'
     : 'Ligue o macropad pelo cabo USB, clique em Conectar e escolha USB Composite Device na janela do navegador.';
 
-  $('#device-chip').classList.toggle('connected', connected);
-  $('#device-name').textContent = connected ? 'Macropad conectado' : state.connection === 'connecting' ? 'Conectando…' : 'Desconectado';
   const count = dirtyCount();
   $('#sync-state').textContent = state.progress || (count ? plural(count, 'alteração não gravada', 'alterações não gravadas') : connected ? 'Tudo gravado' : '');
   $('#sync-state').classList.toggle('pending', Boolean(count) && !state.progress);
@@ -319,7 +368,7 @@ function renderChrome() {
   $('#banner').querySelector('button')?.remove();
   if (banner && !transport.native && transport.supported) $('#banner').append(h('button', { type: 'button', class: 'btn btn-small', onclick: connect }, 'Conectar'));
 
-  $('#status-device').replaceChildren(h('span', { class: `status-dot${connected ? ' on' : ''}` }), connected ? 'Conectado · USB 1189:8840' : 'Sem dispositivo');
+  $('#status-device').replaceChildren(h('span', { class: `status-dot${connected ? ' on' : ''}` }), connected ? 'Macropad conectado · USB 1189:8840' : state.connection === 'connecting' ? 'Conectando…' : 'Sem dispositivo');
   $('#status-mode').textContent = tauri ? `${plural(state.macros.length, 'tecla virtual ativa', 'teclas virtuais ativas')}` : 'Navegador · ações do app indisponíveis';
 }
 
@@ -327,25 +376,44 @@ function renderChrome() {
 function renderInspector() { renderInspectorHead(); renderInspectorBody(); }
 function renderInspectorHead() {
   const slot = state.selected;
+  // A biblioteca acompanha a seleção: destaca a ação atual e diz onde o clique vai atribuir.
+  renderLibrary();
   if (!slot) { $('#inspector-head').replaceChildren(h('h2', { id: 'inspector-title', class: 'inspector-placeholder' }, 'Propriedades')); return; }
   const binding = bindingAt(slot), meta = bindingMeta(binding);
   // h() descarta os filhos nulos; replaceChildren os transformaria no texto "null".
   $('#inspector-head').replaceChildren(h('div', { class: 'inspector-head-row' },
-    h('span', { class: `inspector-icon${meta.where === 'app' ? ' app' : ''}` }, icon(meta.icon)),
+    h('span', { class: `inspector-icon${meta.where === 'app' ? ' via-app' : ''}` }, icon(meta.icon)),
     h('div', { class: 'inspector-title' },
       h('div', { class: 'inspector-title-row' },
         h('h2', { id: 'inspector-title' }, meta.title),
         meta.where === 'device' ? h('span', { class: 'chip' }, icon('logo'), 'No macropad') : null,
         meta.where === 'app' ? h('span', { class: 'chip chip-app' }, icon('bolt'), 'Via app') : null,
-        layerData().drafts.has(slot) ? h('span', { class: 'chip chip-pending' }, 'Não gravado') : null),
+        layerData().drafts.has(slot) ? h('span', { class: 'chip chip-pending' }, 'Não gravado')
+          // Ativa: o macropad já envia a tecla virtual deste controle e as etapas estão salvas no app.
+          : binding.kind === 'app' && tauri && layerData().records.get(slot)?.kind === 'app' ? h('span', { class: 'chip chip-live' }, 'Ativa') : null),
       h('p', {}, `${controlLabel(slot)} · Camada ${state.layer}`)),
     h('div', { class: 'inspector-tools' },
       binding.kind === 'app' && tauri ? h('button', { type: 'button', class: 'btn btn-small', onclick: () => testBinding(bindingAt(slot)) }, icon('play'), 'Testar') : null,
       binding.kind !== 'empty' ? h('button', { type: 'button', class: 'btn btn-small', onclick: () => setDraft(slot, { kind: 'empty' }) }, icon('trash'), 'Remover') : null)));
 }
+// Botões em volta do knob selecionado, na pré-visualização: girar à esquerda fica à esquerda,
+// pressionar em cima e girar à direita à direita. Também aceitam ações arrastadas da biblioteca.
+function knobPicker(knob) {
+  const sides = ['left', 'press', 'right'];
+  return h('div', { class: 'knob-picker', role: 'group', 'aria-label': `Funções do knob ${knob + 1}` }, knobParts.map(({ name, icon: glyph }, action) => {
+    const target = knobSlot(knob, action);
+    const button = h('button', {
+      type: 'button', class: `knob-pick pick-${sides[action]}`, 'aria-label': `${name}: ${labelFor(bindingAt(target))}`,
+      'aria-pressed': String(target === state.selected), onclick: () => select(target)
+    }, icon(glyph));
+    button.classList.toggle('assigned', bindingAt(target).kind !== 'empty');
+    button.classList.toggle('dirty', layerData().drafts.has(target));
+    makeDropTarget(button, target);
+    return button;
+  }));
+}
 const emptyState = (title, text, name = 'empty') => h('div', { class: 'empty-state' }, h('span', { class: 'empty-icon' }, icon(name)), h('strong', {}, title), h('p', {}, text));
 const keycaps = (mods, code) => h('div', { class: 'keycaps' }, comboLabel(mods, code).map(part => h('span', { class: 'keycap-chip' }, part)));
-const aside = (title, text, ...extra) => h('aside', { class: 'inspector-aside' }, h('strong', {}, title), ...extra, h('p', {}, text));
 const field = (label, ...control) => h('div', { class: 'field' }, h('span', { class: 'field-label' }, label), h('div', { class: 'field-control' }, ...control));
 const note = (text, tone = 'info') => h('p', { class: `note note-${tone}` }, icon(tone === 'warning' ? 'warning' : 'info'), h('span', {}, text));
 function renderInspectorBody() {
@@ -356,25 +424,36 @@ function renderInspectorBody() {
     return;
   }
   const binding = bindingAt(slot);
-  const onDevice = 'Fica na memória do macropad e funciona em qualquer computador, mesmo com o app fechado.';
-  const layout = (main, side) => body.replaceChildren(h('div', { class: 'inspector-grid' }, h('div', { class: 'inspector-main' }, main), side));
-  if (binding.kind === 'empty') body.replaceChildren(emptyState('Este controle está sem ação', 'Arraste uma ação da lista à direita até ele, ou clique em uma ação para atribuí-la.'));
+  // Miniatura do controle à esquerda e o formulário ao lado, num bloco só.
+  const layout = (...main) => body.replaceChildren(h('div', { class: 'inspector-grid' }, controlPreview(slot), h('div', { class: 'inspector-main' }, ...main)));
+  const onDevice = note('Fica gravado no macropad e funciona em qualquer computador, mesmo com o app fechado.');
+  if (binding.kind === 'empty') layout(h('div', { class: 'inspector-hint' }, h('strong', {}, 'Sem ação'), h('p', {}, 'Arraste uma ação da lista à direita até este controle, ou clique em uma ação para atribuí-la.')));
   else if (binding.kind === 'key') {
-    layout(h('div', { class: 'form' }, field('Combinação', comboControl(binding, combo => setDraft(slot, { kind: 'key', ...combo })))),
-      aside('Gravado no macropad', onDevice, binding.code ? keycaps(binding.mods, binding.code) : null));
+    layout(h('div', { class: 'form' }, field('Combinação', comboControl(binding, combo => setDraft(slot, { kind: 'key', ...combo })))), onDevice);
   } else if (binding.kind === 'media') {
     const select = h('select', { class: 'input', onchange: event => setDraft(slot, { kind: 'media', media: Number(event.target.value) }) },
       [...media].map(([name, code]) => h('option', { value: code, selected: code === binding.media }, name)));
-    layout(h('div', { class: 'form' }, field('Ação', select)), aside('Gravado no macropad', onDevice));
+    layout(h('div', { class: 'form' }, field('Ação', select)), onDevice);
   } else if (binding.kind === 'raw') {
-    layout(note(`${binding.label}. Este editor não representa essa ação; ela será mantida até você atribuir outra.`, 'warning'),
-      aside('Ação existente', 'Foi gravada por outro programa. Atribua uma nova ação para substituí-la.'));
+    layout(note(`${binding.label}. Foi gravada por outro programa e este editor não a representa; ela será mantida até você atribuir outra ação.`, 'warning'));
   } else {
-    const virtual = virtualCode(state.layer, slot);
-    layout(appEditor(slot, binding), aside('Tecla virtual', tauri
-      ? 'Ao gravar, o macropad passa a enviar esta tecla. O Macropad Studio a intercepta e executa a ação, mesmo minimizado na bandeja.'
-      : 'Ações do app só funcionam no Macropad Studio para Windows.', keycaps(virtual.mods, virtual.code)));
+    layout(...appEditor(slot, binding), tauri ? null : note('Ações do app só funcionam no Macropad Studio para Windows.', 'warning'));
   }
+}
+// Miniatura do controle selecionado, com o mesmo acabamento da pré-visualização do aparelho.
+function controlPreview(slot) {
+  if (slot >= 16) {
+    const part = knobParts[(slot - 16) % 3];
+    return h('div', { class: 'control-preview' },
+      h('div', { class: 'preview-stage' }, h('div', { class: 'knob-press preview-knob' }, h('span', { class: 'knob-indicator' })),
+        h('span', { class: 'preview-badge' }, icon(part.icon))));
+  }
+  const legend = legendFor(bindingAt(slot));
+  return h('div', { class: 'control-preview' },
+    h('div', { class: 'preview-stage' }, h('div', { class: 'keycap preview-key' }, h('span', { class: 'keycap-legend' },
+      legend.icon ? icon(legend.icon) : null,
+      legend.mods ? h('small', {}, legend.mods) : null,
+      legend.text ? h('span', { class: legendClass(legend.text) }, legend.text) : null))));
 }
 function kbdRow(mods, code, placeholder) {
   const parts = comboLabel(mods, code);
@@ -430,20 +509,70 @@ function appEditor(slot, binding) {
   const edit = (index, patch, rerender) => setSteps(steps => Object.assign(steps[index], patch), rerender);
   return binding.multi ? stepList(binding, edit, setSteps) : [h('div', { class: 'form' }, stepFields(binding.steps[0], 0, edit))];
 }
+// Caminho de "Abrir": o ícone e a linha de status dizem o que foi encontrado no disco, e os
+// argumentos só aparecem para programas.
+const URI_PATH = /^[a-z][a-z0-9+.-]+:(?![\\/])/i;
+const PROGRAM_PATH = /\.(exe|bat|cmd|com|lnk)$/i;
+const pathKinds = {
+  empty: { icon: 'folder', text: 'Escolha um arquivo, uma pasta ou um programa.' },
+  dir: { icon: 'folder', text: 'Pasta encontrada', tone: 'ok' },
+  program: { icon: 'app', text: 'Programa encontrado', tone: 'ok' },
+  file: { icon: 'file', text: 'Arquivo encontrado: abre no programa padrão', tone: 'ok' },
+  uri: { icon: 'globe', text: 'Endereço do Windows, como ms-settings: ou shell:startup' },
+  missing: { icon: 'warning', text: 'Caminho não encontrado. Confira se ele existe neste computador.', tone: 'warning' },
+  unknown: { icon: 'file', text: '' }
+};
+async function pathKind(path) {
+  const trimmed = path.trim();
+  if (!trimmed) return 'empty';
+  if (URI_PATH.test(trimmed)) return 'uri';
+  if (!invoke) return 'unknown';
+  const kind = await invoke('path_kind', { path: trimmed }).catch(() => 'unknown');
+  return kind === 'file' && PROGRAM_PATH.test(trimmed) ? 'program' : kind;
+}
+function openFields(step, index, edit) {
+  const kindIcon = h('span', { class: 'path-icon' });
+  const status = h('span', { class: 'path-status' });
+  const argsField = field('Argumentos', h('input', { class: 'input', value: step.args, placeholder: 'Opcional, por exemplo --new-window', spellcheck: 'false', oninput: event => edit(index, { args: event.target.value }) }));
+  let checking = 0;
+  const check = async path => {
+    const ticket = ++checking;
+    const kind = await pathKind(path);
+    if (ticket !== checking) return;
+    const info = pathKinds[kind];
+    kindIcon.replaceChildren(icon(info.icon));
+    kindIcon.dataset.tone = info.tone || '';
+    status.textContent = info.text;
+    status.dataset.tone = info.tone || '';
+    argsField.hidden = kind === 'dir' || kind === 'file';
+  };
+  let timer;
+  const input = h('input', {
+    class: 'input path-input', value: step.path, placeholder: 'C:\\Programas\\app.exe', spellcheck: 'false', 'aria-label': 'Caminho',
+    oninput: event => { edit(index, { path: event.target.value }); clearTimeout(timer); timer = setTimeout(() => check(event.target.value), 250); }
+  });
+  const browse = h('button', {
+    type: 'button', class: 'btn btn-small', disabled: !tauri, 'aria-haspopup': 'menu',
+    onclick: event => {
+      const pick = folder => async () => {
+        const path = await invoke('pick_path', { folder });
+        if (path) edit(index, { path }, true);
+      };
+      const box = event.currentTarget.getBoundingClientRect();
+      showMenu(box.left, box.bottom + 4, [
+        { label: 'Escolher arquivo ou programa…', icon: 'file', action: pick(false) },
+        { label: 'Escolher pasta…', icon: 'folder', action: pick(true) }
+      ]);
+    }
+  }, 'Procurar', icon('arrowDown'));
+  check(step.path);
+  return [
+    field('Caminho', h('div', { class: 'path-field' }, h('div', { class: 'path-box' }, kindIcon, input, browse), status)),
+    argsField
+  ];
+}
 function stepFields(step, index, edit) {
-  if (step.type === 'open') {
-    const browse = folder => async () => {
-      const path = await invoke?.('pick_path', { folder });
-      if (path) edit(index, { path }, true);
-    };
-    return [
-      field('Caminho', h('div', { class: 'input-group' },
-        h('input', { class: 'input', value: step.path, placeholder: 'C:\\Programas\\app.exe', spellcheck: 'false', oninput: event => edit(index, { path: event.target.value }) }),
-        h('button', { type: 'button', class: 'btn btn-small', disabled: !tauri, onclick: browse(false) }, 'Arquivo…'),
-        h('button', { type: 'button', class: 'btn btn-small', disabled: !tauri, onclick: browse(true) }, 'Pasta…'))),
-      field('Argumentos', h('input', { class: 'input', value: step.args, placeholder: 'Opcional', spellcheck: 'false', oninput: event => edit(index, { args: event.target.value }) }))
-    ];
-  }
+  if (step.type === 'open') return openFields(step, index, edit);
   if (step.type === 'website') {
     return [field('Endereço', h('input', {
       class: 'input', type: 'url', value: step.url, placeholder: 'https://', spellcheck: 'false',
@@ -465,7 +594,7 @@ function stepList(binding, edit, setSteps) {
   const tool = (name, label, disabled, action) => h('button', { type: 'button', class: 'btn btn-icon btn-tiny', 'aria-label': label, disabled, onclick: action }, icon(name));
   const items = binding.steps.map((step, index) => h('li', { class: 'step' },
     h('div', { class: 'step-head' },
-      h('span', { class: 'step-index' }, String(index + 1)), icon(stepIcons[step.type]), h('strong', {}, stepNames[step.type]),
+      h('span', { class: 'step-index' }, String(index + 1)), icon(stepIcon(step)), h('strong', {}, stepNames[step.type]),
       h('span', { class: 'step-tools' },
         tool('arrowUp', 'Mover para cima', index === 0, () => setSteps(steps => steps.splice(index - 1, 0, ...steps.splice(index, 1)), true)),
         tool('arrowDown', 'Mover para baixo', index === last, () => setSteps(steps => steps.splice(index + 1, 0, ...steps.splice(index, 1)), true)),
@@ -491,25 +620,37 @@ async function testBinding(binding) {
 // Biblioteca de ações.
 function renderLibrary() {
   const query = normalize($('#action-search').value.trim());
+  const current = state.selected ? bindingAt(state.selected) : null;
+  $('#clear-search').hidden = !query;
+  document.querySelector('.search-hint').hidden = Boolean(query);
+  // Diz o que o clique faz: atribuir ao controle selecionado ou, sem seleção, arrastar.
+  $('#library-context').replaceChildren(...(state.selected
+    ? [icon('chevron'), h('span', {}, 'Atribuir a'), h('strong', {}, controlLabel(state.selected))]
+    : [icon('info'), h('span', {}, 'Arraste uma ação até uma tecla ou knob')]));
+  $('#library-context').classList.toggle('active', Boolean(state.selected));
   const groups = library.map(group => {
     const items = group.items.filter(item => !query || normalize(`${item.name} ${item.description || ''} ${group.title}`).includes(query));
     if (!items.length) return null;
     const details = h('details', { class: 'action-group', open: query || !state.collapsed.has(group.title) },
-      h('summary', {}, icon('chevron', 'icon chevron'), h('span', {}, group.title), group.app ? h('span', { class: 'badge' }, 'App') : null),
-      items.map(item => actionItem(item, group)));
+      h('summary', {}, icon('chevron', 'icon chevron'), h('span', {}, group.title), group.app ? h('span', { class: 'badge' }, 'App') : null,
+        h('span', { class: 'group-count' }, String(items.length))),
+      items.map(item => actionItem(item, group, current)));
     details.addEventListener('toggle', () => { if (!query) state.collapsed[details.open ? 'delete' : 'add'](group.title); });
     return details;
   }).filter(Boolean);
   $('#action-list').replaceChildren(...(groups.length ? groups : [h('p', { class: 'library-empty' }, 'Nenhuma ação encontrada.')]));
 }
-function actionItem(item, group) {
+function actionItem(item, group, current) {
   const unavailable = group.app && !tauri;
+  const active = Boolean(current && item.is(current));
   const button = h('button', {
-    type: 'button', class: 'action-item', draggable: unavailable ? null : 'true', disabled: unavailable
-  }, h('span', { class: 'action-icon' }, icon(item.icon)), h('span', { class: 'action-text' }, h('span', {}, item.name), item.description ? h('small', {}, item.description) : null));
+    type: 'button', class: `action-item${active ? ' active' : ''}`, draggable: unavailable ? null : 'true', disabled: unavailable, 'aria-current': active ? 'true' : null
+  }, h('span', { class: 'action-icon' }, icon(item.icon)), h('span', { class: 'action-text' }, h('span', {}, item.name), item.description ? h('small', {}, item.description) : null),
+    active ? icon('check', 'icon action-check') : null);
   button.addEventListener('click', () => {
     if (!state.selected) { toast('Selecione uma tecla ou um knob primeiro.'); return; }
-    assign(state.selected, item.make());
+    // Clicar na ação que o controle já tem não deve apagar a configuração dela.
+    if (!active) assign(state.selected, item.make());
   });
   button.addEventListener('dragstart', event => { event.dataTransfer.setData(DRAG_ACTION, item.id); event.dataTransfer.effectAllowed = 'copy'; });
   return button;
@@ -517,23 +658,27 @@ function actionItem(item, group) {
 
 // Menu de contexto e atalhos do editor.
 function closeContextMenu() { $('#context-menu').hidden = true; }
-function openContextMenu(x, y) {
-  const binding = bindingAt(state.selected);
-  const item = (label, shortcut, disabled, action) => h('button', { type: 'button', role: 'menuitem', disabled, onclick: () => { closeContextMenu(); action(); } },
-    h('span', {}, label), shortcut ? h('kbd', {}, shortcut) : null);
-  const testable = binding.kind === 'app' && tauri;
+// Menu flutuante genérico: entradas { label, shortcut?, icon?, disabled?, action } ou '-' para separador.
+function showMenu(x, y, entries) {
   const menu = $('#context-menu');
-  menu.replaceChildren(...[
-    item('Copiar', 'Ctrl+C', binding.kind === 'empty' || binding.kind === 'raw', copySelected),
-    item('Colar', 'Ctrl+V', !state.clipboard, pasteSelected),
-    item('Limpar', 'Del', binding.kind === 'empty', clearSelected),
-    testable ? h('hr') : null,
-    testable ? item('Testar ação', '', false, () => testBinding(binding)) : null
-  ].filter(Boolean));
+  menu.replaceChildren(...entries.filter(Boolean).map(entry => entry === '-' ? h('hr') : h('button', {
+    type: 'button', role: 'menuitem', disabled: entry.disabled, onclick: () => { closeContextMenu(); entry.action(); }
+  }, h('span', { class: 'menu-label' }, entry.icon ? icon(entry.icon) : null, entry.label), entry.shortcut ? h('kbd', {}, entry.shortcut) : null)));
   menu.hidden = false;
   menu.style.left = `${Math.min(x, innerWidth - menu.offsetWidth - 8)}px`;
   menu.style.top = `${Math.min(y, innerHeight - menu.offsetHeight - 8)}px`;
   menu.querySelector('button:not(:disabled)')?.focus();
+}
+function openContextMenu(x, y) {
+  const binding = bindingAt(state.selected);
+  const testable = binding.kind === 'app' && tauri;
+  showMenu(x, y, [
+    { label: 'Copiar', shortcut: 'Ctrl+C', disabled: binding.kind === 'empty' || binding.kind === 'raw', action: copySelected },
+    { label: 'Colar', shortcut: 'Ctrl+V', disabled: !state.clipboard, action: pasteSelected },
+    { label: 'Limpar', shortcut: 'Del', disabled: binding.kind === 'empty', action: clearSelected },
+    testable && '-',
+    testable && { label: 'Testar ação', action: () => testBinding(binding) }
+  ]);
 }
 function copySelected() {
   const binding = bindingAt(state.selected);
@@ -776,13 +921,14 @@ async function initialize() {
   try { legends = localStorage.getItem('legends') !== '0'; } catch {}
   $('#legends').checked = legends;
   setLegends(legends);
-  $('#library-note').textContent = tauri
-    ? 'Ações marcadas com App rodam no Macropad Studio por meio de teclas virtuais. As demais ficam gravadas no macropad.'
-    : 'No navegador, apenas ações gravadas no macropad estão disponíveis.';
   renderKeyboard(); renderLibrary();
 
   $('#legends').addEventListener('change', event => setLegends(event.target.checked));
   $('#action-search').addEventListener('input', renderLibrary);
+  $('#action-search').addEventListener('keydown', event => {
+    if (event.key === 'Escape' && event.target.value) { event.stopPropagation(); event.target.value = ''; renderLibrary(); }
+  });
+  $('#clear-search').addEventListener('click', () => { $('#action-search').value = ''; renderLibrary(); $('#action-search').focus(); });
   $('#connect').addEventListener('click', connect);
   $('#offline').addEventListener('click', () => { state.offline = true; renderChrome(); });
   $('#read').addEventListener('click', readCurrent);
@@ -807,12 +953,18 @@ async function initialize() {
   }
   document.addEventListener('pointerdown', event => { if (!event.target.closest('#context-menu')) closeContextMenu(); });
   window.addEventListener('blur', closeContextMenu);
+  // Clicar numa área vazia do preview (fundo, carcaça, vãos entre as teclas) desfaz a seleção.
+  document.querySelector('.canvas').addEventListener('click', event => {
+    if (!event.target.closest('button, input, label')) deselect();
+  });
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape') closeContextMenu();
+    if (event.key === 'Escape' && !$('#context-menu').hidden) { closeContextMenu(); return; }
+    if (event.ctrlKey && event.code === 'KeyF' && !document.querySelector('dialog[open]')) { event.preventDefault(); $('#action-search').focus(); $('#action-search').select(); return; }
     if (!state.selected || document.querySelector('dialog[open]') || event.target.closest('input, textarea, select')) return;
     if (event.ctrlKey && event.code === 'KeyC') { event.preventDefault(); copySelected(); }
     else if (event.ctrlKey && event.code === 'KeyV') { event.preventDefault(); pasteSelected(); }
     else if (event.key === 'Delete') { event.preventDefault(); clearSelected(); }
+    else if (event.key === 'Escape') deselect();
   });
 
   if (tauri) {

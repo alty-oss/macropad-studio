@@ -42,7 +42,7 @@ bun run test     # verifica o protocolo sem conectar o macropad
 ## Uso
 
 1. Conecte o macropad. O app o detecta sozinho e lê a camada ativa.
-2. Arraste uma ação da lista à direita até uma tecla ou knob, ou selecione o controle e clique na ação. Os giros e o pressionamento de cada knob ficam abaixo da pré-visualização.
+2. Arraste uma ação da lista à direita até uma tecla ou knob, ou selecione o controle e clique na ação. Ao clicar num knob, o painel de propriedades mostra abas para girar à esquerda, pressionar e girar à direita.
 3. Ajuste os parâmetros no painel de propriedades. Em atalhos, clique no campo e pressione a combinação; para Win ou Alt+Tab, use o teclado virtual.
 4. Clique em **Gravar no dispositivo**. O app grava, lê o dispositivo de novo e confirma cada controle.
 
@@ -60,6 +60,8 @@ O firmware numera as teclas por coluna, de baixo para cima. A correspondência d
 | 4 | slot 1 | slot 5 | slot 9 |
 
 Essa ordem foi confirmada no aparelho: gravar nos slots 1, 2 e 3 afetou as três teclas inferiores da coluna esquerda.
+
+Cada knob usa três slots a partir do 16 (knob 1: 16–18, knob 2: 19–21, knob 3: 22–24), na ordem girar à esquerda, pressionar, girar à direita, também confirmada no aparelho.
 
 ## Limite importante
 

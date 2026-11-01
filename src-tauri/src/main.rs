@@ -79,6 +79,16 @@ fn pick_path(app: AppHandle, folder: bool) -> Option<String> {
     picked.map(|path| path.to_string())
 }
 
+// Tipo do caminho de uma etapa "Abrir", para a interface avisar sobre erros de digitação.
+#[tauri::command]
+fn path_kind(path: String) -> &'static str {
+    match std::fs::metadata(path.trim()) {
+        Ok(metadata) if metadata.is_dir() => "dir",
+        Ok(_) => "file",
+        Err(_) => "missing",
+    }
+}
+
 #[tauri::command]
 fn autostart_get(app: AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
@@ -214,6 +224,7 @@ fn main() {
             macros_save,
             macro_test,
             pick_path,
+            path_kind,
             autostart_get,
             autostart_set
         ])

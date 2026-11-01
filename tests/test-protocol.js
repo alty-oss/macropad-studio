@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  encode, decode, knobSlot, keySlotForPosition, virtualCode, functionGroups, mainRows, navigationRows, numpadKeys,
+  encode, decode, knobSlot, knobParts, keySlotForPosition, virtualCode, functionGroups, mainRows, navigationRows, numpadKeys,
   modifierOptions, keyNames, equalBinding, appBindingError, labelFor
 } from '../site/protocol.js';
 
@@ -17,6 +17,8 @@ assert.deepEqual(encode(18, 2, { kind: 'media', media: 0xe9 }), [0xfe, 18, 2, 2,
 assert.equal(decode(Uint8Array.from([0xfa, 1, 1, 1, 0, 0, 0, 0, 0, 2, 1, 4, 1, 5]), 1).kind, 'raw');
 assert.equal(knobSlot(0, 2), 18);
 assert.equal(knobSlot(2, 0), 22);
+// Confirmado no aparelho: o primeiro slot de cada knob é o giro à esquerda.
+assert.deepEqual(knobParts.map(part => part.name), ['Girar à esquerda', 'Pressionar', 'Girar à direita']);
 assert.deepEqual(Array.from({ length: 12 }, (_, i) => keySlotForPosition(i, 12)), [4, 8, 12, 3, 7, 11, 2, 6, 10, 1, 5, 9]);
 assert.equal(functionGroups.flat().length + mainRows.flat().length + navigationRows.flat().length + numpadKeys.length, 104);
 assert.deepEqual(modifierOptions.map(([, bit]) => bit), [1, 2, 4, 8, 16, 32, 64, 128]);

@@ -66,6 +66,12 @@ export const modifierCodes = new Map([
 ]);
 
 export const knobSlot = (index, action) => 16 + index * 3 + action;
+// Ordem física confirmada no aparelho: em cada knob, o slot 0 gira à esquerda e o slot 2, à direita.
+export const knobParts = [
+  { name: 'Girar à esquerda', icon: 'rotateLeft' },
+  { name: 'Pressionar', icon: 'press' },
+  { name: 'Girar à direita', icon: 'rotateRight' }
+];
 // Nesta orientação física, as teclas são numeradas pelo firmware por coluna,
 // de baixo para cima: linha superior 4/8/12, linha inferior 1/5/9.
 export function keySlotForPosition(index, keyCount = 12) {
