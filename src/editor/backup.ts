@@ -3,6 +3,7 @@
 // antes de gravar no macropad.
 import { invoke } from '@tauri-apps/api/core';
 import { parseBackup, serializeBackup } from '../device/backup-file.ts';
+import type { MobilePage } from '../device/protocol.ts';
 import type { Binding } from '../device/protocol.ts';
 import { h } from '../lib/dom.ts';
 import { errorText, plural } from '../lib/text.ts';
@@ -55,8 +56,10 @@ export async function exportConfig() {
   try {
     await loadAllLayers();
     const { layers, skipped } = collectLayers();
-    if (!layers.size) { toast('Não há ações para exportar. Conecte o macropad ou configure algum controle.', 'error'); return; }
-    const contents = serializeBackup(state.layout, layers, state.labels);
+    const empty: MobilePage = { buttons: [], folders: [] };
+    const mobile = tauri ? { ...empty, ...await invoke<MobilePage>('mobile_page_get').catch(() => empty) } : empty;
+    if (!layers.size && !mobile.buttons.length) { toast('Não há ações para exportar. Conecte o macropad ou configure algum controle.', 'error'); return; }
+    const contents = serializeBackup(state.layout, layers, state.labels, mobile);
     const fileName = `macropad-studio-${new Date().toISOString().slice(0, 10)}.json`;
     if (!await saveFile(contents, fileName)) return;
     const count = [...layers.values()].reduce((total, controls) => total + controls.size, 0);
@@ -71,9 +74,9 @@ export async function importConfig() {
   try {
     const text = tauri ? await invoke<string | null>('backup_open') : await openInBrowser();
     if (text === null) return;
-    const { layers, labels, skipped } = parseBackup(text, state.layout);
+    const { layers, labels, mobile, skipped } = parseBackup(text, state.layout);
     const count = [...layers.values()].reduce((total, controls) => total + controls.size, 0);
-    if (!count) { toast('O arquivo não tem ações que este macropad possa usar.', 'error'); return; }
+    if (!count && !mobile.buttons.length) { toast('O arquivo não tem ações que este macropad ou celular possa usar.', 'error'); return; }
     const ok = await confirmDialog(`Importar ${plural(count, 'controle', 'controles')}?`,
       `As ações do arquivo substituem as atuais desses controles como alterações não gravadas. Revise e clique em Gravar no dispositivo para aplicá-las.${labels.length ? ' As legendas personalizadas do arquivo valem na hora.' : ''}`, 'Importar');
     if (!ok) return;
@@ -83,6 +86,7 @@ export async function importConfig() {
       const replaced = new Set(labels.map(label => `${label.layer}:${label.slot}`));
       await saveLabels([...state.labels.filter(label => !replaced.has(`${label.layer}:${label.slot}`)), ...labels]);
     }
+    if (tauri && mobile.buttons.length) { await invoke('mobile_page_save', { page: mobile }); document.dispatchEvent(new Event('mobile-page-changed')); }
     renderAll();
     log(`Configuração importada: ${plural(count, 'controle', 'controles')}${skipped ? `, ${skipped} ignorados` : ''}.`);
     toast(skipped ? `Importado. ${plural(skipped, 'item inválido foi ignorado', 'itens inválidos foram ignorados')}.` : 'Importado. Revise e grave no dispositivo.', 'success');

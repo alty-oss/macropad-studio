@@ -1,6 +1,6 @@
 // Sessão com o dispositivo: conexão, leitura das camadas e gravação das alterações.
 import { invoke } from '@tauri-apps/api/core';
-import { appBindingError, appParts, decode, encode, equalBinding, virtualCode, type Binding } from '../device/protocol.ts';
+import { appBindingError, appParts, decode, encode, equalBinding, rotaryOnlyError, virtualCode, type Binding } from '../device/protocol.ts';
 import { transport } from '../device/transport.ts';
 import { errorText, plural } from '../lib/text.ts';
 import { renderBoard } from './board.ts';
@@ -9,6 +9,7 @@ import { confirmDialog, log, toast } from './feedback.ts';
 import { renderInspector } from './inspector.ts';
 import { stopCapture } from './shortcuts.ts';
 import { allSlots, controlLabel, dirtyCount, layerData, macroBinding, state, tauri } from './state.ts';
+import { syncMobileMirror } from './mobile-sync.ts';
 
 // Mensagem do Rust (device.rs) quando o macropad não está ligado.
 const NOT_FOUND = 'Macropad não encontrado';
@@ -37,6 +38,7 @@ async function readLayer(number: number, discardDrafts = false) {
   if (discardDrafts) layer.drafts.clear();
   for (const [slot, draft] of layer.drafts) if (equalBinding(records.get(slot), draft)) layer.drafts.delete(slot);
   renderBoard(); renderLayers(); renderChrome(); renderInspector();
+  void syncMobileMirror();
   log(`Camada ${number}: ${records.size} ações lidas.`);
   return records;
 }
@@ -121,6 +123,7 @@ async function persistMacros(changes: Change[]) {
   }
   await invoke('macros_save', { macros });
   state.macros = macros;
+  void syncMobileMirror();
 }
 
 // O dispositivo confirma a tecla virtual de uma ação do app; as etapas são conferidas no app.
@@ -137,6 +140,8 @@ export async function save() {
     changes = state.layers.flatMap((layer, index) => [...layer.drafts].map(([slot, binding]): Change => {
       const number = index + 1;
       if (binding.kind === 'app') {
+        const rotaryError = rotaryOnlyError(slot, binding);
+        if (rotaryError) throw new Error(`Camada ${number}, ${controlLabel(slot)}: ${rotaryError}`);
         const error = tauri ? appBindingError(binding) : 'ações do app exigem o Macropad Studio para Windows.';
         if (error) throw new Error(`Camada ${number}, ${controlLabel(slot)}: ${error}`);
       }

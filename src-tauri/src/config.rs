@@ -7,7 +7,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub const VERSION: u32 = 2;
+pub const VERSION: u32 = 3;
 
 fn five() -> u8 {
     5
@@ -99,18 +99,8 @@ pub enum Step {
         source: String,
         #[serde(default)]
         amount: f64,
-    },
-    Homeassistant {
-        service: String,
-        entity: String,
-    },
-    Midi {
-        port: String,
-        channel: u8,
-        control: u8,
-        // "set" grava o valor; "add" soma ao último valor enviado (bom para knobs).
-        mode: String,
-        value: i32,
+        #[serde(default)]
+        path: String,
     },
     Voicemeeter {
         parameter: String,
@@ -124,6 +114,10 @@ pub enum Step {
         app: String,
         action: String,
     },
+    // Etapa de um tipo que o app não tem mais (Home Assistant e MIDI, por exemplo). Só existe para
+    // ler arquivos antigos sem perder o resto; Config::load as descarta.
+    #[serde(other)]
+    Removed,
 }
 
 // Etapas usadas quando o programa em foco é "app" (nome do executável, como photoshop.exe).
@@ -162,6 +156,127 @@ pub struct Macro {
     pub profiles: Vec<Profile>,
 }
 
+// Ações que existem somente na página remota do celular. Elas não possuem
+// camada/código HID: o slot é reservado apenas para o servidor LAN. Um botão com
+// `folder` diferente de zero abre a pasta com esse id em vez de executar etapas.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MobileButton {
+    pub slot: u8,
+    #[serde(default)]
+    pub folder: u8,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub icon: String,
+    #[serde(default)]
+    pub color: String,
+    // Imagem da tecla em data URL (PNG, JPEG, WebP ou GIF), já reduzida pelo editor. "fit" é
+    // "icon" (no lugar do ícone) ou "cover" (cobre a tecla inteira).
+    #[serde(default)]
+    pub image: String,
+    #[serde(default)]
+    pub fit: String,
+    #[serde(default)]
+    pub multi: bool,
+    pub steps: Vec<Step>,
+    #[serde(default)]
+    pub mode: Mode,
+    #[serde(default)]
+    pub alt: Vec<Step>,
+    #[serde(default)]
+    pub profiles: Vec<Profile>,
+}
+
+// Tamanho máximo do data URL de uma imagem de botão (o editor reduz as imagens bem abaixo disso).
+pub const MOBILE_IMAGE_LIMIT: usize = 600_000;
+
+// Tipo e bytes de um data URL de imagem aceito nos botões do celular. SVG fica de fora: aberto direto
+// no navegador, poderia executar scripts na origem do servidor.
+pub fn decode_image(data: &str) -> Option<(String, Vec<u8>)> {
+    use base64::{engine::general_purpose::STANDARD, Engine};
+    if data.len() > MOBILE_IMAGE_LIMIT { return None; }
+    let (mime, encoded) = data.strip_prefix("data:")?.split_once(";base64,")?;
+    if !matches!(mime, "image/png" | "image/jpeg" | "image/webp" | "image/gif") { return None; }
+    let bytes = STANDARD.decode(encoded.trim()).ok()?;
+    (!bytes.is_empty()).then(|| (mime.to_string(), bytes))
+}
+
+impl Step {
+    // Ações incrementais (volume, brilho, rolagem, valores "somar"): no macropad ficam nos giros
+    // dos knobs; no celular viram botões que repetem enquanto são segurados.
+    pub fn is_incremental(&self) -> bool {
+        match self {
+            Step::Brightness { .. } => true,
+            Step::Audio { action, .. } => action == "up" || action == "down",
+            Step::Obs { action, .. } => action == "volume",
+            Step::Mouse { action, .. } => action.starts_with("scroll"),
+            Step::Voicemeeter { mode, .. } => mode == "add",
+            _ => false,
+        }
+    }
+}
+
+impl MobileButton {
+    pub fn as_macro(&self, layer: u8) -> Macro {
+        Macro {
+            layer,
+            slot: self.slot,
+            mods: 0,
+            code: 0,
+            multi: self.multi,
+            steps: self.steps.clone(),
+            mode: self.mode,
+            alt: self.alt.clone(),
+            profiles: self.profiles.clone(),
+        }
+    }
+}
+
+// Pasta do celular: outra página de 15 botões. O botão 1 de toda pasta é o "Voltar",
+// desenhado pelo celular, então nenhum botão salvo ocupa esse slot.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MobileFolder {
+    pub id: u8,
+    pub name: String,
+    pub buttons: Vec<MobileButton>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MobilePage {
+    pub buttons: Vec<MobileButton>,
+    pub folders: Vec<MobileFolder>,
+}
+
+// O executor identifica cada controle por (camada, slot). As camadas 1–3 são do macropad; a página
+// principal do celular usa a camada 0 e a pasta N usa MOBILE_FOLDER_LAYER + N.
+pub const MOBILE_FOLDER_LAYER: u8 = 100;
+pub const MOBILE_MAX_FOLDER: u8 = u8::MAX - MOBILE_FOLDER_LAYER;
+
+pub fn mobile_layer(page: u8) -> u8 {
+    if page == 0 { 0 } else { MOBILE_FOLDER_LAYER.saturating_add(page) }
+}
+
+pub fn mobile_page_of(layer: u8) -> Option<u8> {
+    match layer {
+        0 => Some(0),
+        layer if layer > MOBILE_FOLDER_LAYER => Some(layer - MOBILE_FOLDER_LAYER),
+        _ => None,
+    }
+}
+
+impl MobilePage {
+    pub fn buttons_of(&self, page: u8) -> Option<&[MobileButton]> {
+        if page == 0 { return Some(&self.buttons); }
+        self.folders.iter().find(|folder| folder.id == page).map(|folder| folder.buttons.as_slice())
+    }
+
+    pub fn button(&self, page: u8, slot: u8) -> Option<&MobileButton> {
+        self.buttons_of(page)?.iter().find(|button| button.slot == slot)
+    }
+}
+
 // Legenda, ícone e cor escolhidos pelo usuário para um controle.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Label {
@@ -188,23 +303,29 @@ impl Default for ObsSettings {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(default)]
-pub struct HomeAssistantSettings {
-    pub url: String,
-}
-
 // Preferências do app. Senhas e tokens ficam no Gerenciador de Credenciais do Windows.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
     pub osd: bool,
+    pub sound_volume: u8,
+    pub always_admin: bool,
     pub obs: ObsSettings,
-    pub homeassistant: HomeAssistantSettings,
+    pub mobile: MobileSettings,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MobileSettings {
+    pub enabled: bool,
+    pub port: u16,
+}
+impl Default for MobileSettings {
+    fn default() -> Self { Self { enabled: false, port: 38800 } }
 }
 impl Default for Settings {
     fn default() -> Self {
-        Self { osd: true, obs: ObsSettings::default(), homeassistant: HomeAssistantSettings::default() }
+        Self { osd: true, sound_volume: 100, always_admin: false, obs: ObsSettings::default(), mobile: MobileSettings::default() }
     }
 }
 
@@ -218,11 +339,13 @@ pub struct Config {
     pub labels: Vec<Label>,
     #[serde(default)]
     pub settings: Settings,
+    #[serde(default)]
+    pub mobile: MobilePage,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Self { version: VERSION, macros: Vec::new(), labels: Vec::new(), settings: Settings::default() }
+        Self { version: VERSION, macros: Vec::new(), labels: Vec::new(), settings: Settings::default(), mobile: MobilePage::default() }
     }
 }
 
@@ -240,10 +363,34 @@ impl Config {
             Ok(mut config) => {
                 // Versão 1 não tinha o campo; os campos novos já entram com os valores padrão.
                 config.version = VERSION;
-                (config, None)
+                let removed = config.drop_removed_steps();
+                if removed == 0 { return (config, None); }
+                // Grava já sem elas, para o aviso aparecer uma vez só.
+                let saved = config.save(path);
+                let notice = format!("{removed} {} de recursos que saíram do app (Home Assistant, MIDI) {} das ações.", if removed == 1 { "etapa" } else { "etapas" }, if removed == 1 { "foi removida" } else { "foram removidas" });
+                (config, Some(match saved { Ok(()) => notice, Err(error) => format!("{notice} Não foi possível gravar a configuração: {error}") }))
             }
             Err(error) => (Self::default(), Some(set_aside(path, &error.to_string()))),
         }
+    }
+
+    // Tira as etapas de tipos removidos de todas as ações e devolve quantas eram.
+    fn drop_removed_steps(&mut self) -> usize {
+        fn clean(steps: &mut Vec<Step>) -> usize {
+            let before = steps.len();
+            steps.retain(|step| *step != Step::Removed);
+            before - steps.len()
+        }
+        fn lists(steps: &mut Vec<Step>, alt: &mut Vec<Step>, profiles: &mut [Profile]) -> usize {
+            clean(steps) + clean(alt) + profiles.iter_mut().map(|profile| clean(&mut profile.steps)).sum::<usize>()
+        }
+        let macros: usize = self.macros.iter_mut().map(|item| lists(&mut item.steps, &mut item.alt, &mut item.profiles)).sum();
+        let buttons = self.mobile.buttons.iter_mut().chain(self.mobile.folders.iter_mut().flat_map(|folder| folder.buttons.iter_mut()));
+        let mobile: usize = buttons.map(|button| lists(&mut button.steps, &mut button.alt, &mut button.profiles)).sum();
+        // Botões do celular que ficaram sem nenhuma etapa deixam de existir.
+        self.mobile.buttons.retain(|button| button.folder != 0 || !button.steps.is_empty() || button.multi);
+        for folder in &mut self.mobile.folders { folder.buttons.retain(|button| button.folder != 0 || !button.steps.is_empty() || button.multi); }
+        macros + mobile
     }
 
     // Grava num arquivo temporário e renomeia, para não deixar um JSON pela metade.
@@ -304,6 +451,23 @@ mod tests {
     }
 
     #[test]
+    fn etapas_de_recursos_removidos_saem_sem_perder_o_resto() {
+        let dir = temporary_dir("removidos");
+        let path = dir.join("config.json");
+        let old = r#"{"version":3,"settings":{"homeassistant":{"url":"http://ha"}},"macros":[{"layer":1,"slot":1,"mods":0,"code":104,"steps":[{"type":"homeassistant","service":"toggle","entity":"light.sala"},{"type":"delay","ms":10}]}],"mobile":{"buttons":[{"slot":2,"steps":[{"type":"midi","port":"x","channel":1,"control":7,"mode":"set","value":1}]}]}}"#;
+        fs::write(&path, old).unwrap();
+        let (config, warning) = Config::load(&path);
+        assert!(warning.unwrap().contains("2 etapas"));
+        assert_eq!(config.macros[0].steps, vec![Step::Delay { ms: 10 }]);
+        assert!(config.mobile.buttons.is_empty());
+        let saved = fs::read_to_string(&path).unwrap();
+        assert!(!saved.contains("homeassistant") && !saved.contains("midi"));
+        let (_, again) = Config::load(&path);
+        assert!(again.is_none());
+        fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
     fn le_a_versao_1_e_grava_a_atual() {
         let dir = temporary_dir("v1");
         let path = dir.join("config.json");
@@ -315,7 +479,7 @@ mod tests {
         assert_eq!(config.macros[0].mode, Mode::Normal);
         assert_eq!(config.macros[0].steps[0], Step::Open { path: "C:\\a.exe".into(), args: String::new(), focus: false });
         config.save(&path).unwrap();
-        assert!(fs::read_to_string(&path).unwrap().contains("\"version\": 2"));
+        assert!(fs::read_to_string(&path).unwrap().contains("\"version\": 3"));
         fs::remove_dir_all(dir).ok();
     }
 }

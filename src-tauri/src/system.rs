@@ -6,7 +6,10 @@ use std::{
     mem::size_of,
     path::Path,
     ptr::{null, null_mut},
-    sync::atomic::{AtomicU32, Ordering},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        mpsc,
+    },
     thread,
     time::Duration,
 };
@@ -17,7 +20,7 @@ use windows_sys::Win32::{
     },
     Foundation::{CloseHandle, BOOL, HANDLE, HWND, LPARAM, RECT},
     Graphics::Gdi::{EnumDisplayMonitors, HDC, HMONITOR},
-    Media::Multimedia::mciSendStringW,
+    Media::Multimedia::{mciGetErrorStringW, mciSendStringW},
     Security::{GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY},
     System::{
         DataExchange::{CloseClipboard, EmptyClipboard, GetClipboardData, OpenClipboard, SetClipboardData},
@@ -31,6 +34,7 @@ use windows_sys::Win32::{
             QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
         },
     },
+    UI::Shell::ShellExecuteW,
     UI::{
         Input::KeyboardAndMouse::{
             SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
@@ -41,7 +45,7 @@ use windows_sys::Win32::{
             BringWindowToTop, EnumWindows, GetForegroundWindow, GetWindow, GetWindowLongPtrW, GetWindowThreadProcessId,
             IsIconic, IsWindowVisible, IsZoomed, PostMessageW, SendMessageTimeoutW, SetForegroundWindow, SetWindowPos,
             SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, GW_OWNER, HWND_BROADCAST, HWND_NOTOPMOST, HWND_TOPMOST,
-            SMTO_ABORTIFHUNG, SWP_NOMOVE, SWP_NOSIZE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SW_SHOWNOACTIVATE, WM_CLOSE,
+            SMTO_ABORTIFHUNG, SWP_NOMOVE, SWP_NOSIZE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SW_SHOWNOACTIVATE, SW_SHOWNORMAL, WM_CLOSE,
             WM_SETTINGCHANGE, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST,
         },
     },
@@ -119,6 +123,33 @@ pub fn foreground_blocks_input() -> bool {
         let elevated = token_elevated(process);
         CloseHandle(process);
         elevated != Some(false)
+    }
+}
+
+pub fn is_elevated() -> bool {
+    token_elevated(unsafe { GetCurrentProcess() }).unwrap_or(false)
+}
+
+fn quote_windows_arg(arg: &str) -> String {
+    if arg.is_empty() || arg.chars().any(char::is_whitespace) || arg.contains('"') {
+        format!("\"{}\"", arg.replace('"', "\\\""))
+    } else {
+        arg.to_string()
+    }
+}
+
+pub fn relaunch_as_admin(args: &[String]) -> Result<(), String> {
+    let executable = std::env::current_exe().map_err(|error| format!("Não foi possível localizar o executável: {error}"))?;
+    let mut parameters = args.iter().skip(1).map(|arg| quote_windows_arg(arg)).collect::<Vec<_>>();
+    parameters.push("--macropad-elevated-relaunch".into());
+    let executable = wide(&executable.to_string_lossy());
+    let operation = wide("runas");
+    let parameters = wide(&parameters.join(" "));
+    let result = unsafe { ShellExecuteW(null_mut(), operation.as_ptr(), executable.as_ptr(), parameters.as_ptr(), null(), SW_SHOWNORMAL) };
+    if (result as isize) <= 32 {
+        Err("O Windows recusou a elevação do Macropad Studio.".into())
+    } else {
+        Ok(())
     }
 }
 
@@ -336,22 +367,51 @@ pub fn brightness(change: i32) -> Result<String, String> {
 }
 
 static SOUNDS: AtomicU32 = AtomicU32::new(0);
+static SOUND_VOLUME: AtomicU32 = AtomicU32::new(100);
 
-// Toca um arquivo de áudio (MP3, WAV…) sem esperar o fim, como numa soundboard.
+pub fn set_sound_volume(volume: u8) {
+    SOUND_VOLUME.store(volume.min(100) as u32, Ordering::Relaxed);
+}
+
+// Um comando MCI; o erro vem com o texto do próprio Windows.
+fn mci(command: &str) -> Result<(), String> {
+    let code = unsafe { mciSendStringW(wide(command).as_ptr(), null_mut(), 0, null_mut()) };
+    if code == 0 {
+        return Ok(());
+    }
+    let mut message = [0u16; 256];
+    unsafe { mciGetErrorStringW(code, message.as_mut_ptr(), message.len() as u32) };
+    let length = message.iter().position(|&unit| unit == 0).unwrap_or(0);
+    Err(format!("erro {code}: {}", String::from_utf16_lossy(&message[..length])))
+}
+
+// Toca um arquivo de áudio (MP3, WAV…) sem esperar o fim, como numa soundboard. O resultado da
+// abertura volta para quem chamou: um arquivo que o Windows não consegue tocar vira um aviso, em
+// vez de silêncio.
 pub fn sound(path: &str) -> Result<(), String> {
-    if !Path::new(path.trim()).is_file() {
+    let path = path.trim().to_string();
+    if !Path::new(&path).is_file() {
         return Err(format!("Arquivo de som não encontrado: {path}."));
     }
     let alias = format!("macropad{}", SOUNDS.fetch_add(1, Ordering::Relaxed));
-    let path = path.trim().to_string();
+    let (opened, result) = mpsc::channel();
+    let file = path.clone();
     thread::spawn(move || {
-        let command = |text: String| unsafe { mciSendStringW(wide(&text).as_ptr(), null_mut(), 0, null_mut()) };
-        if command(format!("open \"{path}\" type mpegvideo alias {alias}")) == 0 {
-            command(format!("play {alias} wait"));
-            command(format!("close {alias}"));
+        // O dispositivo é escolhido pela extensão (MP3 pelo mpegvideo, WAV pelo waveaudio).
+        let open = mci(&format!("open \"{file}\" alias {alias}"));
+        let ok = open.is_ok();
+        opened.send(open).ok();
+        if ok {
+            let volume = SOUND_VOLUME.load(Ordering::Relaxed) * 10;
+            mci(&format!("setaudio {alias} volume to {volume}")).ok();
+            mci(&format!("play {alias} wait")).ok();
+            mci(&format!("close {alias}")).ok();
         }
     });
-    Ok(())
+    match result.recv_timeout(Duration::from_secs(3)) {
+        Ok(Err(error)) => Err(format!("Não foi possível tocar {path}: {error}")),
+        _ => Ok(()),
+    }
 }
 
 // Soma ao número guardado num arquivo de texto (0 zera), por exemplo para uma fonte de texto do OBS.
@@ -425,6 +485,13 @@ pub fn local_date_time() -> (String, String) {
     unsafe { GetLocalTime(&mut now) };
     let now: windows_sys::Win32::Foundation::SYSTEMTIME = now;
     (format!("{:02}/{:02}/{}", now.wDay, now.wMonth, now.wYear), format!("{:02}:{:02}", now.wHour, now.wMinute))
+}
+
+pub fn file_timestamp() -> String {
+    let mut now = unsafe { std::mem::zeroed() };
+    unsafe { GetLocalTime(&mut now) };
+    let now: windows_sys::Win32::Foundation::SYSTEMTIME = now;
+    format!("{:04}{:02}{:02}-{:02}{:02}{:02}", now.wYear, now.wMonth, now.wDay, now.wHour, now.wMinute, now.wSecond)
 }
 
 #[cfg(test)]

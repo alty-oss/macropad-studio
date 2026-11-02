@@ -13,6 +13,8 @@ const mediaShort = new Map<number, string>([[0xe9, 'Vol +'], [0xea, 'Vol −'], 
 const mediaKeyIcons: Record<string, IconName> = { playPause: 'playPause', next: 'next', prev: 'prev', stop: 'stop', volumeUp: 'volumeUp', volumeDown: 'volumeDown', mute: 'mute' };
 const mediaKeyShort: Record<string, string> = { playPause: 'Play', next: 'Próx.', prev: 'Ant.', stop: 'Parar', volumeUp: 'Vol +', volumeDown: 'Vol −', mute: 'Mudo' };
 
+const obsIcons: Record<string, IconName> = { mute: 'mic', visibility: 'eye', volume: 'volumeUp', record: 'record', recordStart: 'record', recordStop: 'record', recordPause: 'record', stream: 'broadcast', streamStart: 'broadcast', streamStop: 'broadcast', replay: 'replay', screenshot: 'image', scene: 'monitor' };
+
 // O ícone segue o conteúdo: em "Abrir", programa, arquivo ou pasta; em mídia e áudio, a ação.
 export function stepIcon(step: Step): IconName {
   switch (step.type) {
@@ -34,9 +36,8 @@ export function stepIcon(step: Step): IconName {
     case 'sound': return 'music';
     case 'counter': return 'hash';
     case 'brightness': return 'sun';
-    case 'obs': return step.action === 'mute' ? 'mic' : step.action === 'visibility' ? 'eye' : step.action === 'volume' ? 'volumeUp' : 'obs';
-    case 'homeassistant': return 'home';
-    case 'midi': case 'voicemeeter': return 'sliders';
+    case 'obs': return obsIcons[step.action] ?? 'obs';
+    case 'voicemeeter': return 'mixer';
     case 'player': return step.action === 'next' ? 'next' : step.action === 'prev' ? 'prev' : step.action === 'stop' ? 'stop' : 'playPause';
   }
 }
@@ -90,8 +91,6 @@ function shortName(step: Step): string {
     case 'counter': return step.change === 0 ? 'Zerar' : `${step.change > 0 ? '+' : ''}${step.change}`;
     case 'brightness': return `${step.change > 0 ? '+' : ''}${step.change}%`;
     case 'obs': return step.action === 'scene' ? step.scene || 'Cena' : obsShort[step.action] ?? (step.source || 'OBS');
-    case 'homeassistant': return step.entity.split('.').pop()?.replace(/_/g, ' ') || 'Casa';
-    case 'midi': return `CC ${step.control}`;
     case 'voicemeeter': return 'VM';
     case 'player': return withoutExtension(step.app) || 'Player';
     default: return stepNames[step.type];

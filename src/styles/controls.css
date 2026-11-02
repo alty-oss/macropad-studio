@@ -12,7 +12,7 @@
 .btn-tiny .icon { width: 14px; height: 14px; }
 .btn-link { padding: 4px; border: 0; background: none; color: var(--text-secondary); font-size: 12px; }
 .btn-link:hover { color: var(--text); text-decoration: underline; }
-.input { width: 100%; min-width: 0; height: 30px; padding: 0 9px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); transition: border-color var(--fast); }
+.input { width: 100%; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); color: var(--text); transition: border-color var(--fast); }
 .input:hover { border-color: #4a4d54; }
 .input:focus { border-color: var(--accent); outline: none; }
 textarea.input { height: auto; min-height: 58px; padding: 7px 9px; resize: vertical; line-height: 1.45; }

@@ -1,5 +1,5 @@
 /* Propriedades */
-.inspector-head { padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+.inspector-head { padding: 8px 14px; border-bottom: 1px solid var(--border-subtle); }
 .inspector-head-row { display: flex; align-items: center; gap: 12px; min-height: 36px; }
 .inspector-placeholder { display: flex; align-items: center; min-height: 36px; color: var(--text-secondary); font-size: 13px; font-weight: 600; }
 .inspector-icon { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--border); border-radius: 8px; background: linear-gradient(180deg, #34363b, #2a2c30); color: var(--text); flex: none; }
@@ -16,11 +16,18 @@
 .chip-pending { border-color: #e8a9484d; background: #e8a9481f; color: var(--pending); }
 .chip-live { border-color: #45b58b4d; background: #45b58b1f; color: var(--success); }
 .chip-live::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-.inspector-body { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; user-select: text; }
-.inspector-grid { display: flex; gap: 20px; align-items: flex-start; }
+.inspector-body { flex: 1; min-height: 0; overflow: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; user-select: text; }
+.inspector-grid { display: flex; gap: 16px; align-items: flex-start; }
+/* Aparência ao lado do formulário quando há largura; embaixo dele em telas estreitas. */
+.inspector-side { flex: 0 1 340px; min-width: 240px; padding-left: 16px; border-left: 1px solid var(--border-subtle); }
+.inspector-side .inspector-section { padding-top: 0; border-top: 0; }
+@container workspace (max-width: 900px) {
+  .inspector-grid { flex-wrap: wrap; }
+  .inspector-side { flex-basis: 100%; padding: 10px 0 0; border-left: 0; border-top: 1px solid var(--border-subtle); }
+}
 /* Miniatura do controle: a mesma keycap ou knob do aparelho, numa escala maior (--u). */
 .control-preview { flex: none; }
-.preview-stage { position: relative; display: grid; place-items: center; width: 104px; height: 104px; flex: none; border-radius: 12px; background: linear-gradient(135deg, #4b4c4e, #38393b 48%, #28292b); box-shadow: inset 0 1px 0 #ffffff1f, inset 0 0 0 1px #00000066, 0 8px 18px #0007; }
+.preview-stage { position: relative; display: grid; place-items: center; width: 92px; height: 92px; flex: none; border-radius: 12px; background: linear-gradient(135deg, #4b4c4e, #38393b 48%, #28292b); box-shadow: inset 0 1px 0 #ffffff1f, inset 0 0 0 1px #00000066, 0 8px 18px #0007; }
 .preview-key { --u: 4.4px; width: 72px; height: 72px; pointer-events: none; }
 .preview-knob { --u: 3.9px; width: 68px; height: 68px; margin-top: -7px; pointer-events: none; }
 .preview-badge { position: absolute; right: 8px; bottom: 8px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #fff; box-shadow: 0 2px 8px #0009; }
@@ -28,17 +35,18 @@
 .inspector-hint { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; max-width: 460px; }
 .inspector-hint strong { font-weight: 600; }
 .inspector-hint p { color: var(--text-faint); font-size: 12px; line-height: 1.5; }
-.inspector-main { flex: 0 1 760px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.inspector-main { flex: 1 1 420px; min-width: 0; max-width: 720px; display: flex; flex-direction: column; gap: 8px; }
 .keycaps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .keycap-chip { display: inline-grid; place-items: center; min-width: 34px; height: 34px; padding: 0 10px 3px; border-radius: 7px; background: linear-gradient(180deg, #2b2d31, #1e1f22); box-shadow: inset 0 0 0 1px #00000080, 0 2px 0 #0e0f11, 0 4px 8px #0007; position: relative; color: #eceef1; font-size: 12px; font-weight: 600; }
 .keycap-chip::before { content: ""; position: absolute; inset: 2px 3px 5px; border-radius: 5px; background: linear-gradient(180deg, #46484e, #393b40); box-shadow: inset 0 1px 0 #ffffff1c; }
 .keycap-chip { isolation: isolate; }
 .keycap-chip::before { z-index: -1; }
-.form { display: flex; flex-direction: column; gap: 10px; max-width: 680px; }
-.field { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 14px; }
+.form { display: flex; flex-direction: column; gap: 7px; max-width: 680px; }
+.field { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 10px; }
 .field-label { color: var(--text-secondary); text-align: right; }
 .field:has(textarea) { align-items: start; }
-.field:has(textarea) .field-label { padding-top: 6px; }
+.field:has(textarea) .field-label { padding-top: 5px; }
+.field-label { font-size: 12px; }
 .combo-control { display: flex; gap: 8px; align-items: center; }
 .shortcut-field { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; height: 32px; padding: 0 5px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-input); text-align: left; transition: border-color var(--fast), box-shadow var(--fast); }
 .shortcut-field:hover { border-color: #4a4d54; }
@@ -54,20 +62,20 @@
 .empty-icon .icon { width: 20px; height: 20px; }
 .empty-state strong { color: var(--text); font-weight: 600; }
 .empty-state p { max-width: 400px; color: var(--text-faint); font-size: 12px; }
-.step-list { display: flex; flex-direction: column; gap: 8px; max-width: 680px; margin: 0; padding: 0; list-style: none; }
-.step { padding: 8px 10px 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-app); }
-.step-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.step-list { display: flex; flex-direction: column; gap: 6px; max-width: 680px; margin: 0; padding: 0; list-style: none; }
+.step { padding: 6px 8px 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--bg-app); }
+.step-head { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font-size: 12px; }
 .step-index { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--bg-elevated); color: var(--text-secondary); font-size: 11px; font-weight: 600; }
 .step-head strong { font-weight: 600; }
 .step-tools { display: flex; gap: 2px; margin-left: auto; }
-.step .field { grid-template-columns: 92px minmax(0, 1fr); }
+.step .field { grid-template-columns: 84px minmax(0, 1fr); }
 .add-step { max-width: 220px; }
 /* Seções do painel: comportamento, perfis e aparência. */
-.inspector-section { display: flex; flex-direction: column; gap: 10px; max-width: 680px; padding-top: 14px; border-top: 1px solid var(--border-subtle); }
+.inspector-section { display: flex; flex-direction: column; gap: 8px; max-width: 680px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
 .inspector-section h3 { color: var(--text-secondary); font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-.subsection { display: flex; flex-direction: column; gap: 8px; padding-left: 12px; border-left: 2px solid var(--border); }
+.subsection { display: flex; flex-direction: column; gap: 6px; padding-left: 10px; border-left: 2px solid var(--border); }
 .subsection h4 { margin: 0; font-size: 12px; font-weight: 600; }
-.profile { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
+.profile { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--border-subtle); border-radius: var(--radius-md); }
 .profile-head { display: flex; align-items: center; gap: 8px; }
 .profile-head > .icon { color: var(--text-secondary); }
 .profile-head .input { max-width: 260px; }
@@ -81,5 +89,13 @@
 .pick[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
 .pick .icon { width: 15px; height: 15px; }
 .swatch { width: 24px; height: 24px; padding: 0; border: 2px solid transparent; border-radius: 50%; box-shadow: inset 0 0 0 1px #0004; }
+.swatch:hover { transform: scale(1.1); }
+/* Cor livre: o seletor nativo fica invisível sobre um círculo com gradiente. */
+.swatch-picker { position: relative; overflow: hidden; background: conic-gradient(#ff5a4f, #f5c400, #2fd27f, #18c3ff, #8e5cff, #ff4fa3, #ff5a4f); cursor: pointer; }
+.swatch-picker.active { border-color: var(--text); }
+.swatch-custom { position: absolute; inset: -6px; width: calc(100% + 12px); height: calc(100% + 12px); opacity: 0; cursor: pointer; }
 .swatch[aria-pressed="true"] { border-color: var(--text); }
 .swatch-none { background: repeating-linear-gradient(135deg, var(--bg-input) 0 4px, var(--border) 4px 5px); }
+/* Dentro do formulário, a lista vazia vira uma linha discreta em vez de um bloco centralizado. */
+.inspector-main .empty-state { flex: none; align-items: flex-start; gap: 2px; padding: 2px 0; text-align: left; }
+.inspector-main .empty-state .empty-icon { display: none; }

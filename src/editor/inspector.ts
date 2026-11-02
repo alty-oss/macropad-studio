@@ -2,8 +2,7 @@
 // e a aparência (legenda, ícone e cor) da tecla.
 import { invoke } from '@tauri-apps/api/core';
 import { media } from '../device/keys.ts';
-import { appBindingError, appParts, knobParts, newStep, stepNames, type AppMode, type Binding, type BindingOf, type Step, type StepType } from '../device/protocol.ts';
-import type { MediaKey } from '../device/steps.ts';
+import { appBindingError, appParts, equivalentSteps, knobParts, newStep, rotaryOnlyError, stepNames, type AppMode, type Binding, type BindingOf, type Step, type StepType } from '../device/protocol.ts';
 import { $, h, inputValue, type Child } from '../lib/dom.ts';
 import { customIcons, icon, type IconName } from '../lib/icons.ts';
 import { errorText } from '../lib/text.ts';
@@ -51,28 +50,29 @@ function renderInspectorBody() {
     return;
   }
   const binding = bindingAt(slot);
-  // Miniatura do controle à esquerda e o formulário ao lado, num bloco só.
-  const layout = (...main: Child[]) => body.replaceChildren(h('div', { class: 'inspector-grid' }, controlPreview(slot), h('div', { class: 'inspector-main' }, ...main)));
+  // Miniatura do controle à esquerda, o formulário ao lado e a aparência numa coluna à direita.
+  const layout = (main: Child[], side: Child = null) => body.replaceChildren(h('div', { class: 'inspector-grid' }, controlPreview(slot), h('div', { class: 'inspector-main' }, ...main), side ? h('div', { class: 'inspector-side' }, side) : null));
   const onDevice = note('Fica gravado no macropad e funciona em qualquer computador, mesmo com o app fechado.');
   const looks = binding.kind === 'empty' || binding.kind === 'raw' ? null : appearance(slot);
   switch (binding.kind) {
     case 'empty':
-      layout(h('div', { class: 'inspector-hint' }, h('strong', {}, 'Sem ação'), h('p', {}, 'Arraste uma ação da lista à direita até este controle, ou clique em uma ação para atribuí-la.')));
+      layout([h('div', { class: 'inspector-hint' }, h('strong', {}, 'Sem ação'), h('p', {}, 'Arraste uma ação da lista à direita até este controle, ou clique em uma ação para atribuí-la.'))]);
       break;
     case 'key':
-      layout(h('div', { class: 'form' }, field('Combinação', comboControl(binding, combo => setDraft(slot, { kind: 'key', ...combo })))), onDevice, looks);
+      layout([h('div', { class: 'form' }, field('Combinação', comboControl(binding, combo => setDraft(slot, { kind: 'key', ...combo })))), onDevice], looks);
       break;
     case 'media': {
       const picker = h('select', { class: 'input', onchange: event => setDraft(slot, { kind: 'media', media: Number(inputValue(event)) }) },
         [...media].map(([name, code]) => h('option', { value: code, selected: code === binding.media }, name)));
-      layout(h('div', { class: 'form' }, field('Ação', picker)), onDevice, looks);
+      layout([h('div', { class: 'form' }, field('Ação', picker)), onDevice], looks);
       break;
     }
     case 'raw':
-      layout(note(`${binding.label}. Foi gravada por outro programa e este editor não a representa; ela será mantida até você atribuir outra ação.`, 'warning'));
+      layout([note(`${binding.label}. Foi gravada por outro programa e este editor não a representa; ela será mantida até você atribuir outra ação.`, 'warning')]);
       break;
     case 'app':
-      layout(...appEditor(slot, binding), tauri ? null : note('Ações do app só funcionam no Macropad Studio para Windows.', 'warning'), looks);
+      layout([...appEditor(slot, binding), rotaryOnlyError(slot, binding) ? note(rotaryOnlyError(slot, binding)!, 'warning') : null,
+        tauri ? null : note('Ações do app só funcionam no Macropad Studio para Windows.', 'warning')], looks);
   }
 }
 
@@ -162,8 +162,15 @@ function stepList(steps: Step[], key: ListKey, update: Update): Child[] {
           tool('trash', 'Remover etapa', false, () => change(list => { list.splice(index, 1); })))),
       h('div', { class: 'form' }, stepFields(step, edit)));
   });
-  const add = h('select', { class: 'input add-step', 'aria-label': 'Adicionar etapa', onchange: event => change(list => { list.push(newStep(inputValue(event) as StepType)); }) },
-    h('option', { value: '' }, '+ Adicionar etapa'), Object.entries(stepNames).map(([type, name]) => h('option', { value: type }, name)));
+  const rotary = state.selected !== null && state.selected >= 16 && (state.selected - 16) % 3 !== 1;
+  const makeStep = (type: StepType): Step => {
+    const step = newStep(type);
+    if (!rotary && step.type === 'mouse' && step.action.startsWith('scroll')) step.action = 'left';
+    if (!rotary && step.type === 'voicemeeter' && step.mode === 'add') step.mode = 'set';
+    return step;
+  };
+  const add = h('select', { class: 'input add-step', 'aria-label': 'Adicionar etapa', onchange: event => change(list => { list.push(makeStep(inputValue(event) as StepType)); }) },
+    h('option', { value: '' }, '+ Adicionar etapa'), Object.entries(stepNames).map(([type, name]) => h('option', { value: type, disabled: !rotary && type === 'brightness' }, name)));
   return [
     items.length ? h('ol', { class: 'step-list' }, items) : emptyState('Nenhuma etapa', 'Adicione etapas para executá-las em sequência: abrir um programa, aguardar, digitar um texto…'),
     add
@@ -205,13 +212,7 @@ function refreshPreview() {
 
 // Etapas que reproduzem a ação, para testar sem gravar: ações do app e também atalhos e mídia
 // gravados no aparelho.
-const mediaCodes = new Map<number, MediaKey>([[0xe9, 'volumeUp'], [0xea, 'volumeDown'], [0xe2, 'mute'], [0xcd, 'playPause'], [0xb5, 'next'], [0xb6, 'prev']]);
-function testableSteps(binding: Binding): Step[] | null {
-  if (binding.kind === 'app') return binding.steps;
-  if (binding.kind === 'key' && binding.code) return [{ type: 'hotkey', mods: binding.mods, code: binding.code }];
-  if (binding.kind === 'media' && mediaCodes.has(binding.media)) return [{ type: 'media', key: mediaCodes.get(binding.media)! }];
-  return null;
-}
+const testableSteps = equivalentSteps;
 
 export async function testSelected() {
   const binding = state.selected ? bindingAt(state.selected) : null;

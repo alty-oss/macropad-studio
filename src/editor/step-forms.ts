@@ -2,7 +2,7 @@
 // alteração parcial (e redesenha o painel quando a forma do formulário muda).
 import { invoke } from '@tauri-apps/api/core';
 import {
-  audioActions, audioTargets, homeAssistantServices, httpMethods, mediaKeys, midiModes, mouseActions, obsActions, obsNeedsScene,
+  audioActions, audioTargets, httpMethods, mediaKeys, mouseActions, obsActions, obsNeedsScene,
   obsNeedsSource, playerActions, systemActions, voicemeeterModes, windowActions, type Step, type StepOf
 } from '../device/steps.ts';
 import { h, inputValue, type Child } from '../lib/dom.ts';
@@ -47,7 +47,7 @@ function suggestions(load: () => Promise<string[]>): [string, HTMLDataListElemen
   return [id, list];
 }
 
-// Listas vindas do app (cenas do OBS, entidades, portas MIDI…), guardadas por alguns segundos para
+// Listas vindas do app (cenas do OBS, fontes, programas abertos…), guardadas por alguns segundos para
 // não refazer o pedido a cada tecla digitada.
 const cache = new Map<string, { at: number; value: Promise<unknown> }>();
 function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
@@ -64,7 +64,7 @@ const obsLists = () => nativeList<{ scenes: string[]; inputs: string[] }>('obs_l
 const runningApps = () => nativeList<string[]>('running_apps');
 export const appSuggestions = () => suggestions(runningApps);
 
-function browseButton(onPick: (path: string) => void, { folder = 'both', save = false }: { folder?: 'both' | 'file'; save?: boolean } = {}) {
+function browseButton(onPick: (path: string) => void, { folder = 'both', save = false }: { folder?: 'both' | 'file' | 'folder'; save?: boolean } = {}) {
   return h('button', {
     type: 'button', class: 'btn btn-small', disabled: !tauri, 'aria-haspopup': folder === 'both' ? 'menu' : null,
     onclick: async (event: MouseEvent) => {
@@ -73,6 +73,7 @@ function browseButton(onPick: (path: string) => void, { folder = 'both', save = 
         if (path) onPick(path);
       };
       if (folder === 'file') { await pick(false)(); return; }
+      if (folder === 'folder') { await pick(true)(); return; }
       const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
       showMenu(box.left, box.bottom + 4, [
         { label: 'Escolher arquivo ou programa…', icon: 'file', action: pick(false) },
@@ -81,10 +82,10 @@ function browseButton(onPick: (path: string) => void, { folder = 'both', save = 
     }
   }, 'Procurar', folder === 'both' ? icon('arrowDown') : null);
 }
-function simplePath(value: string, placeholder: string, edit: EditStep, options: { save?: boolean } = {}) {
+function simplePath(value: string, placeholder: string, edit: EditStep, options: { save?: boolean; folder?: 'file' | 'folder' } = {}) {
   const input = h('input', { class: 'input path-input', value, placeholder, spellcheck: 'false', oninput: (event: Event) => edit({ path: inputValue(event) }) });
   return h('div', { class: 'path-field' }, h('div', { class: 'path-box' }, h('span', { class: 'path-icon' }, icon('file')), input,
-    browseButton(path => edit({ path }, true), { folder: 'file', save: options.save })));
+    browseButton(path => edit({ path }, true), { folder: options.folder ?? 'file', save: options.save })));
 }
 
 // Caminho de "Abrir": o ícone e a linha de status dizem o que foi encontrado no disco, e os
@@ -216,29 +217,6 @@ export function stepFields(step: Step, edit: EditStep): HTMLElement[] {
     case 'brightness':
       return [field('Ajuste', numberInput(step.change, { min: -100, max: 100, step: 5, suffix: '%' }, change => edit({ change }))), note('Monitores externos com DDC/CI. Use valores negativos para escurecer.')];
     case 'obs': return obsFields(step, edit);
-    case 'homeassistant': {
-      const [listId, list] = suggestions(() => nativeList<{ id: string; name: string }[]>('home_assistant_entities').then(items => items.map(item => item.id)));
-      return [
-        field('Ação', select(homeAssistantServices, step.service, service => edit({ service }))),
-        field('Entidade', textInput(step.entity, 'light.sala', entity => edit({ entity }), listId), list),
-        note('Configure o endereço e o token do Home Assistant em Configurações.')
-      ];
-    }
-    case 'midi': {
-      const ports = h('select', { class: 'input', onchange: (event: Event) => edit({ port: inputValue(event) }) }, h('option', { value: '' }, 'Carregando portas…'));
-      nativeList<string[]>('midi_ports').then(names => {
-        const all = step.port && !names.includes(step.port) ? [step.port, ...names] : names;
-        ports.replaceChildren(h('option', { value: '' }, all.length ? 'Escolha a porta' : 'Nenhuma porta MIDI encontrada'), ...all.map(name => h('option', { value: name, selected: name === step.port }, name)));
-      }).catch(() => ports.replaceChildren(h('option', { value: '' }, 'Disponível no app para Windows')));
-      return [
-        field('Porta', ports),
-        field('Canal', numberInput(step.channel, { min: 1, max: 16 }, channel => edit({ channel }))),
-        field('Controle (CC)', numberInput(step.control, { min: 0, max: 127 }, control => edit({ control }))),
-        field('Modo', select(midiModes, step.mode, mode => edit({ mode }))),
-        field('Valor', numberInput(step.value, { min: -127, max: 127 }, value => edit({ value }))),
-        note('Para programas sem porta MIDI própria, crie uma porta virtual com o loopMIDI.')
-      ];
-    }
     case 'voicemeeter': {
       const listId = `voicemeeter-${++listIds}`;
       return [
@@ -268,6 +246,8 @@ function obsFields(step: StepOf<'obs'>, edit: EditStep): HTMLElement[] {
     obsNeedsScene.has(step.action) ? field('Cena', textInput(step.scene, step.action === 'visibility' ? 'Vazio: cena atual' : 'Nome da cena', scene => edit({ scene }), scenesId), scenes) : null,
     obsNeedsSource.has(step.action) ? field('Fonte', textInput(step.source, step.action === 'visibility' ? 'Câmera, overlay…' : 'Microfone, Áudio do desktop…', source => edit({ source }), sourcesId), sources) : null,
     step.action === 'volume' ? field('Ajuste', numberInput(step.amount, { min: -100, max: 100, step: 0.5, suffix: 'dB', integer: false }, amount => edit({ amount }))) : null,
+    step.action === 'screenshot' ? field('Pasta', simplePath(step.path ?? '', 'C:\\Screenshots', edit, { folder: 'folder' })) : null,
+    step.action === 'screenshot' ? note('O arquivo será salvo automaticamente em PNG, com o nome da fonte e a data/hora.') : null,
     status
   ].filter(Boolean) as HTMLElement[];
 }

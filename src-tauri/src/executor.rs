@@ -53,8 +53,6 @@ pub fn init_thread() {
 pub trait Host: Send + Sync + 'static {
     fn lookup(&self, layer: u8, slot: u8) -> Option<Macro>;
     fn obs(&self) -> &'static Obs;
-    // Endereço e token do Home Assistant.
-    fn home_assistant(&self) -> (String, String);
     // Tecla virtual pressionada ou solta, para a interface acompanhar.
     fn pressed(&self, layer: u8, slot: u8, down: bool);
     // Resultado de uma execução: textos para o OSD, avisos e o erro, se houver.
@@ -235,12 +233,8 @@ fn run_step(host: &dyn Host, step: &Step, generation: u64) -> Result<String, Str
         Step::Sound { path } => done(system::sound(path)),
         Step::Counter { path, change } => system::counter(path, *change),
         Step::Brightness { change } => system::brightness(*change),
-        Step::Obs { action, scene, source, amount } => host.obs().run_action(action, scene, source, *amount),
-        Step::Homeassistant { service, entity } => {
-            let (url, token) = host.home_assistant();
-            integrations::home_assistant(&url, &token, service, entity)
-        }
-        Step::Midi { port, channel, control, mode, value } => integrations::midi(port, *channel, *control, mode, *value),
+        Step::Obs { action, scene, source, amount, path } => host.obs().run_action(action, scene, source, *amount, path),
+        Step::Removed => Ok(String::new()),
         Step::Voicemeeter { parameter, mode, value } => integrations::voicemeeter(parameter, mode, *value),
         Step::Player { app, action } => audio::player(app, action),
     }
@@ -377,8 +371,7 @@ pub fn describe(step: &Step) -> String {
         Step::Counter { .. } => "Contador".into(),
         Step::Brightness { .. } => "Brilho".into(),
         Step::Obs { .. } => "OBS".into(),
-        Step::Homeassistant { entity, .. } => entity.clone(),
-        Step::Midi { .. } => "MIDI".into(),
+        Step::Removed => String::new(),
         Step::Voicemeeter { parameter, .. } => parameter.clone(),
         Step::Player { .. } => "Player".into(),
     }
@@ -456,6 +449,11 @@ fn scan_code(code: u8) -> Option<(u16, bool)> {
         0x87 => plain(0x73),
         _ => None,
     }
+}
+
+// O caminho inverso, para reconhecer as teclas que o macropad envia (device_input.rs).
+pub fn hid_from_scan(scan: u16, extended: bool) -> Option<u8> {
+    (0..=u8::MAX).find(|&code| scan_code(code) == Some((scan, extended)))
 }
 
 fn press_combo(mods: u8, code: u8) -> Result<(), String> {

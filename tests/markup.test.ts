@@ -14,3 +14,12 @@ test("todo $('#id') usado nos módulos existe no index.html", async () => {
   const missing = [...ids].filter(id => !html.includes(`id="${id}"`));
   expect(missing).toEqual([]);
 });
+
+test('abas do editor usam IDs únicos e o modo Celular fica na tela principal', () => {
+  const ids = [...html.matchAll(/\bid="([^"]+)"/g)].map(([, id]) => id);
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(ids).toContain('editor-tab-mobile');
+  expect(ids).toContain('editor-mobile');
+  expect(ids).toContain('mobile-editor-grid');
+  expect(ids).not.toContain('mobile-editor-modal');
+});

@@ -11,6 +11,8 @@ export interface ObsStatus { connected: boolean; recording: boolean; streaming: 
 export const tauri = isTauri();
 
 export const state = {
+  editorMode: 'macropad' as 'macropad' | 'mobile',
+  mobileSelected: 1,
   connection: 'searching' as Connection,
   connectError: '',
   everConnected: false,
@@ -23,12 +25,13 @@ export const state = {
   macros: [] as Macro[],
   labels: [] as Label[],
   clipboard: null as Binding | null,
-  collapsed: new Set<string>(),
+  collapsed: new Set<string>(['Navegação', 'Teclado', 'Multimídia', 'Sistema', 'Áudio', 'OBS Studio', 'Knobs', 'Integrações', 'Geral']),
+  mobileCollapsed: new Set<string>(),
   // Função de cada knob aberta por último (0 girar à esquerda, 1 pressionar, 2 girar à direita).
   knobPart: [1, 1, 1],
   // Ângulo do indicador de cada knob na pré-visualização, que acompanha os giros do aparelho.
   knobAngle: [0, 0, 0],
-  // Camada de onde veio a última tecla virtual: é a camada ativa no macropad.
+  // Camada inferida da última entrada identificada: é a camada ativa no macropad.
   detectedLayer: null as number | null,
   keysPaused: false,
   obs: { connected: false, recording: false, streaming: false, scene: '', error: '' } as ObsStatus,
@@ -43,6 +46,22 @@ export const allSlots = () => [
   ...Array.from({ length: state.layout.keys }, (_, i) => i + 1),
   ...Array.from({ length: state.layout.knobs * 3 }, (_, i) => 16 + i)
 ];
+
+// O que o macropad enviou como teclado ou mídia (src-tauri/src/device_input.rs).
+export type DeviceInput = { kind: 'key'; mods: number; code: number; down: boolean } | { kind: 'media'; media: number };
+
+// Controles cuja ação gravada no aparelho produz este envio, em cada camada já lida. Compara com o
+// que está no dispositivo, não com os rascunhos.
+export function slotsForInput(input: DeviceInput): Map<number, number[]> {
+  const found = new Map<number, number[]>();
+  state.layers.forEach((layer, index) => {
+    const slots = [...layer.records].filter(([, binding]) => input.kind === 'key'
+      ? binding.kind === 'key' && binding.mods === input.mods && binding.code === input.code
+      : binding.kind === 'media' && binding.media === input.media).map(([slot]) => slot);
+    if (slots.length) found.set(index + 1, slots);
+  });
+  return found;
+}
 
 // Ação "app" de um slot, com as etapas salvas na configuração do app.
 export function macroBinding(layer: number, slot: number): Binding {

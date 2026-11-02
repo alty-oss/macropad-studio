@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.4
+
+### Celular
+- Use o celular como Stream Deck pela rede local, aberto pelo QR code ou pelo endereço (sem código de pareamento), espelho das camadas e página exclusiva de 15 botões. A aba Celular no cabeçalho traz a grade, biblioteca de ações e propriedades para a tela principal.
+- Página do celular em tela cheia e sem rolagem: 5 × 3 deitado, 3 × 5 em pé, teclas com acabamento de stream deck e configurações na engrenagem lateral.
+- **Pastas** no celular (Navegação › Pasta): cada pasta é outra página de botões, com "Voltar" no primeiro botão; o editor navega por breadcrumb e permite arrastar uma tecla sobre outra para trocá-las de lugar. A configuração exportada inclui as pastas.
+- **Imagem nos botões**: escolha ou arraste uma imagem até a tecla e use como logo (no lugar do ícone) ou cobrindo a tecla inteira.
+- O celular aceita todas as ações da biblioteca: atalho de teclado e teclas de mídia viram etapas do app, e as ações de knob (volume, brilho, rolagem e Voicemeeter incremental) viram botões que repetem enquanto são segurados.
+- No espelho do macropad pelo celular, atalhos e mídia gravados no aparelho também funcionam (o app reproduz o envio), e os giros dos knobs repetem enquanto o botão é segurado.
+- **App instalável (PWA)** no iPhone e no Android, com ícone, tela cheia e convite para instalar; diálogo "Conectar celular" com QR code maior, botão para copiar o endereço e "Desconectar celular".
+
+### Editor
+- Biblioteca de ações maior, com ícones coloridos por categoria e logotipos reais (OBS, Spotify, Twitch, YouTube, Discord), também disponíveis como ícone das teclas.
+- Painel de propriedades mais compacto, com a aparência numa coluna ao lado.
+- Nova logo do app; o cabeçalho deixou de mostrar a logo e o nome.
+
+### Removido
+- Home Assistant e MIDI. Etapas desses tipos em configurações antigas são descartadas ao abrir o app, com um aviso, sem perder o resto.
+
 ## 0.3.0
 
 ### Novas ações do app

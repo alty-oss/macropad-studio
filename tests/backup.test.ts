@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { parseBackup, serializeBackup } from '../src/device/backup-file.ts';
-import type { Binding } from '../src/device/protocol.ts';
+import type { Binding, MobileButton } from '../src/device/protocol.ts';
 
 const layout = { keys: 12, knobs: 3 };
 const controls = new Map<number, Binding>([
@@ -51,6 +51,23 @@ describe('arquivo de configuração', () => {
     const parsed = parseBackup(serializeBackup(layout, new Map([[1, new Map([[4, binding]])]]), labels), layout);
     expect(parsed.layers.get(1)?.get(4)).toEqual(binding);
     expect(parsed.labels).toEqual([labels[0]]);
+  });
+
+  test('exporta e importa a página exclusiva do celular', () => {
+    const mobile: MobileButton[] = [{ slot: 1, folder: 0, text: 'Cena', icon: 'obs', color: '#3286ff', image: '', fit: '', multi: false, mode: 'normal', alt: [], profiles: [], steps: [{ type: 'obs', action: 'scene', scene: 'Jogo', source: '', amount: 0 }] }];
+    const parsed = parseBackup(serializeBackup(layout, new Map(), [], { buttons: mobile, folders: [] }), layout);
+    expect(parsed.mobile.buttons).toEqual(mobile);
+  });
+
+  test('exporta e importa pastas do celular e descarta atalhos para pastas ausentes', () => {
+    const scene: MobileButton = { slot: 2, folder: 0, text: 'Jogo', icon: '', color: '', image: 'data:image/png;base64,AAAA', fit: 'cover', multi: false, mode: 'normal', alt: [], profiles: [], steps: [{ type: 'obs', action: 'scene', scene: 'Jogo', source: '', amount: 0 }] };
+    const folder: MobileButton = { slot: 3, folder: 4, text: 'Cenas', icon: '', color: '#2f6bff', image: '', fit: '', multi: false, mode: 'normal', alt: [], profiles: [], steps: [] };
+    const orphan: MobileButton = { ...folder, slot: 5, folder: 9 };
+    const page = { buttons: [folder, orphan], folders: [{ id: 4, name: 'Cenas', buttons: [scene, { ...scene, slot: 1 }] }] };
+    const parsed = parseBackup(serializeBackup(layout, new Map(), [], page), layout);
+    expect(parsed.mobile.buttons).toEqual([folder]);
+    // O botão 1 de uma pasta é o "Voltar" e não pode ser importado.
+    expect(parsed.mobile.folders).toEqual([{ id: 4, name: 'Cenas', buttons: [scene] }]);
   });
 
   test('lê arquivos da versão 1, sem os campos novos', () => {

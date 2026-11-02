@@ -21,7 +21,7 @@
   --radius-md: 8px;
   --radius-lg: 10px;
   --titlebar: 52px;
-  --library: 292px;
+  --library: 300px;
   --statusbar: 26px;
   --fast: 120ms;
   --normal: 180ms;
@@ -42,6 +42,7 @@ h1, h2, h3, p { margin: 0; }
 code, kbd { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; }
 svg { pointer-events: none; -webkit-user-drag: none; }
 .icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.icon.icon-brand { fill: currentColor; stroke: none; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { border: 3px solid transparent; border-radius: 6px; background: #45484e padding-box; }

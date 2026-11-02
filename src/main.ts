@@ -13,11 +13,12 @@ import { renderInspector } from './editor/inspector.ts';
 import { kitMenuEntries } from './editor/kits.ts';
 import { loadLabels } from './editor/labels.ts';
 import { renderLibrary } from './editor/library.ts';
+import { bindMobileEditor, openMobileEditor } from './editor/mobile-editor.ts';
 import { closeContextMenu, showMenu, type MenuEntry } from './editor/menu.ts';
-import { connect, onDeviceChange, readCurrent, save } from './editor/session.ts';
-import { bindSettings, checkForUpdate, openSettings, renderObsState, savedLegends, savedTheme, setLegends, setTheme } from './editor/settings.ts';
+import { connect, onDeviceChange, readCurrent, save, switchLayer } from './editor/session.ts';
+import { bindSettings, checkForUpdate, openSettings, renderObsState, savedLegends, savedTheme, setLegends, setTheme, watchMobileStatus } from './editor/settings.ts';
 import { closeKeyboard, renderKeyboard } from './editor/shortcuts.ts';
-import { controlLabel, dirtyCount, state, tauri, type ObsStatus } from './editor/state.ts';
+import { controlLabel, dirtyCount, slotsForInput, state, tauri, type DeviceInput, type ObsStatus } from './editor/state.ts';
 import { $ } from './lib/dom.ts';
 import { icon, type IconName } from './lib/icons.ts';
 import { errorText } from './lib/text.ts';
@@ -42,6 +43,25 @@ function openMoreMenu(event: MouseEvent) {
   showMenu(box.right - 260, box.bottom + 6, entries);
 }
 
+async function switchEditorMode(mode: 'macropad' | 'mobile') {
+  if (mode === 'mobile' && !tauri) return;
+  state.editorMode = mode;
+  document.body.dataset.editor = mode;
+  if (mode === 'mobile' && !state.everConnected) state.offline = true;
+  const mobile = mode === 'mobile';
+  document.querySelectorAll<HTMLButtonElement>('.editor-tab').forEach(button => {
+    const active = button.dataset.editorTab === mode;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-selected', String(active));
+  });
+  for (const id of ['#editor-macropad', '#inspector', '#physical-layer-group', '#sync-state', '#undo', '#redo', '#read', '#save', '#open-backup']) $(id).hidden = mobile;
+  for (const id of ['#editor-mobile', '#mobile-inspector', '#mobile-editor-save']) $(id).hidden = !mobile;
+  renderChrome();
+  renderLibrary();
+  watchMobileStatus(mobile);
+  if (mobile) await openMobileEditor();
+}
+
 function bindControls() {
   const search = $<HTMLInputElement>('#action-search');
   $('#legends').addEventListener('change', event => setLegends((event.target as HTMLInputElement).checked));
@@ -52,6 +72,8 @@ function bindControls() {
   $('#clear-search').addEventListener('click', () => { search.value = ''; renderLibrary(); search.focus(); });
   $('#connect').addEventListener('click', connect);
   $('#offline').addEventListener('click', () => { state.offline = true; renderChrome(); });
+  $('#mobile-from-connect').addEventListener('click', () => void switchEditorMode('mobile'));
+  document.querySelectorAll<HTMLButtonElement>('.editor-tab').forEach(button => button.addEventListener('click', () => void switchEditorMode(button.dataset.editorTab as 'macropad' | 'mobile')));
   $('#read').addEventListener('click', readCurrent);
   $('#save').addEventListener('click', save);
   $('#undo').addEventListener('click', undo);
@@ -66,12 +88,13 @@ function bindControls() {
     catch (error) { checkbox.checked = !checkbox.checked; toast(errorText(error), 'error'); }
   });
   bindSettings();
+  bindMobileEditor();
   $('#clear-log').addEventListener('click', () => { $('#log').textContent = 'Pronto.'; });
   $('#close-keyboard').addEventListener('click', () => closeKeyboard(false));
   $('#cancel-keyboard').addEventListener('click', () => closeKeyboard(false));
   $('#confirm-keyboard').addEventListener('click', () => closeKeyboard(true));
   $('#keyboard-modal').addEventListener('cancel', event => { event.preventDefault(); closeKeyboard(false); });
-  for (const dialog of document.querySelectorAll<HTMLDialogElement>('#keyboard-modal, #settings-modal, #welcome-modal')) {
+  for (const dialog of document.querySelectorAll<HTMLDialogElement>('#keyboard-modal, #settings-modal, #mobile-connection-modal, #welcome-modal')) {
     dialog.addEventListener('click', event => {
       if (event.target !== dialog) return;
       if (dialog.id === 'keyboard-modal') closeKeyboard(false);
@@ -90,6 +113,10 @@ function bindControls() {
     const inDialog = Boolean(document.querySelector('dialog[open]'));
     const inField = Boolean((event.target as Element).closest('input, textarea, select'));
     if (event.ctrlKey && event.code === 'KeyF' && !inDialog) { event.preventDefault(); search.focus(); search.select(); return; }
+    if (state.editorMode === 'mobile') {
+      if (event.ctrlKey && event.code === 'KeyS' && !inDialog) { event.preventDefault(); $<HTMLButtonElement>('#mobile-editor-save').click(); }
+      return;
+    }
     // Nos campos de texto, Ctrl+Z desfaz a digitação do próprio campo.
     if (event.ctrlKey && !inDialog && !inField && !state.busy) {
       if (event.code === 'KeyZ' && !event.shiftKey) { event.preventDefault(); undo(); return; }
@@ -103,7 +130,7 @@ function bindControls() {
   });
 }
 
-// Eventos do Rust: tecla virtual acionada, falhas das ações do app, OBS e pausa das teclas.
+// Eventos do Rust: ação do macropad acionada, falhas das ações do app, OBS e pausa das teclas.
 async function listenToApp() {
   state.macros = await invoke<Macro[]>('macros_get').catch(() => []);
   state.keysPaused = await invoke<boolean>('keys_paused_get').catch(() => false);
@@ -111,9 +138,27 @@ async function listenToApp() {
   const problem = await invoke<string | null>('config_problem').catch(() => null);
   if (problem) { log(problem, false); toast(problem, 'error'); }
   listen<[number, number]>('macro-fired', ({ payload: [layer, slot] }) => {
-    if (layer === state.layer) flash(slot);
     if (state.detectedLayer !== layer) { state.detectedLayer = layer; renderLayers(); }
-    log(`Tecla virtual: camada ${layer}, ${controlLabel(slot)}.`, false);
+    log(`Ação do macropad: camada ${layer}, ${controlLabel(slot)}.`, false);
+    void switchLayer(layer).then(() => flash(slot));
+  });
+  // Ações gravadas no aparelho (atalhos e mídia) não passam pelas teclas virtuais: o app as reconhece
+  // pelo que o macropad envia e anima o controle correspondente na camada aberta. Se só uma camada
+  // lida tiver essa ação, ela é a camada ativa.
+  listen<DeviceInput>('device-input', ({ payload }) => {
+    if (payload.kind === 'key' && !payload.down) return;
+    const found = slotsForInput(payload);
+    if (found.size === 1) {
+      const [layer] = found.keys();
+      const slots = found.get(layer) ?? [];
+      const changed = state.detectedLayer !== layer;
+      if (changed) {
+        state.detectedLayer = layer;
+        renderLayers();
+        if (tauri) invoke('layer_detected', { layer }).catch(() => {});
+      }
+      void switchLayer(layer).then(() => slots.forEach(slot => flash(slot)));
+    }
   });
   listen<string>('macro-error', ({ payload }) => { log(`Ação do app: ${payload}`, false); toast(payload, 'error'); });
   listen<ObsStatus>('obs-state', ({ payload }) => { state.obs = payload; renderChrome(); renderObsState(); });
@@ -131,6 +176,8 @@ function welcome() {
 async function initialize() {
   for (const element of document.querySelectorAll<HTMLElement>('[data-icon]')) element.prepend(icon(element.dataset.icon as IconName));
   setTheme(savedTheme());
+  $('#editor-tab-mobile').hidden = !tauri;
+  $('#mobile-from-connect').hidden = !tauri;
   const legends = savedLegends();
   $<HTMLInputElement>('#legends').checked = legends;
   setLegends(legends);

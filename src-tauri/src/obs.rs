@@ -9,6 +9,7 @@ use std::{
     collections::HashMap,
     io::ErrorKind,
     net::{TcpStream, ToSocketAddrs},
+    path::{Path, PathBuf},
     sync::{mpsc, Mutex},
     thread,
     time::{Duration, Instant},
@@ -87,7 +88,7 @@ impl Obs {
     }
 
     // Executa uma etapa "obs" e devolve o texto para o OSD.
-    pub fn run_action(&self, action: &str, scene: &str, source: &str, amount: f64) -> Result<String, String> {
+    pub fn run_action(&self, action: &str, scene: &str, source: &str, amount: f64, path: &str) -> Result<String, String> {
         let simple = |kind: &str, text: &str| self.request(kind, Value::Null).map(|_| text.to_string());
         match action {
             "scene" => self.request("SetCurrentProgramScene", json!({ "sceneName": scene })).map(|_| format!("Cena · {scene}")),
@@ -118,9 +119,45 @@ impl Obs {
                 self.request("SetInputVolume", json!({ "inputName": source, "inputVolumeDb": next }))?;
                 Ok(format!("{source} · {next:.1} dB"))
             }
+            "screenshot" => {
+                let file = screenshot_path(path, source)?;
+                self.request("SaveSourceScreenshot", json!({
+                    "sourceName": source,
+                    "imageFormat": "png",
+                    "imageFilePath": file.to_string_lossy()
+                }))?;
+                Ok(format!("Screenshot · {}", file.display()))
+            }
             _ => Err(format!("Ação do OBS desconhecida: {action}.")),
         }
     }
+}
+
+fn safe_source_name(source: &str) -> String {
+    let name: String = source.trim().chars().map(|character| {
+        if "<>:\"/\\|?*".contains(character) || character.is_control() { '_' } else { character }
+    }).collect();
+    let name = name.trim_matches([' ', '.']).trim();
+    if name.is_empty() { "fonte".into() } else { name.into() }
+}
+
+fn screenshot_path(folder: &str, source: &str) -> Result<PathBuf, String> {
+    let directory = Path::new(folder.trim());
+    if !directory.is_dir() {
+        return Err(format!("Pasta de screenshots não encontrada: {}.", directory.display()));
+    }
+    let candidate = directory.join(format!("{}-{}.png", safe_source_name(source), crate::system::file_timestamp()));
+    if !candidate.exists() {
+        return Ok(candidate);
+    }
+    let stem = candidate.file_stem().and_then(|name| name.to_str()).unwrap_or("screenshot");
+    for suffix in 2..10_000 {
+        let next = directory.join(format!("{stem}-{suffix}.png"));
+        if !next.exists() {
+            return Ok(next);
+        }
+    }
+    Err("Não foi possível escolher um nome livre para o screenshot.".into())
 }
 
 // O OBS aceita de -100 dB (mudo) a +26 dB. Um valor "-inf" volta como 0 do JSON; partimos de -100.
@@ -336,5 +373,11 @@ mod tests {
         assert_eq!(volume_db(-3.0, 2.0), -1.0);
         assert_eq!(volume_db(25.0, 5.0), 26.0);
         assert_eq!(volume_db(f64::NEG_INFINITY, 3.0), -97.0);
+    }
+
+    #[test]
+    fn nome_de_fonte_vira_nome_de_arquivo_seguro() {
+        assert_eq!(safe_source_name("Mic/Aux: Principal"), "Mic_Aux_ Principal");
+        assert_eq!(safe_source_name("..."), "fonte");
     }
 }

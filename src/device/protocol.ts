@@ -1,7 +1,7 @@
 // Protocolo do macropad CH57x (USB 1189:8840): slots, teclas virtuais e codificação dos registros.
 // Não acessa o DOM, para que os testes possam importá-lo diretamente.
 import { comboLabel, isKnownKey, keyNames, mediaNames } from './keys.ts';
-import { stepError, stepNames, stepSummary, type Step } from './steps.ts';
+import { stepError, stepNames, stepSummary, type MediaKey, type Step } from './steps.ts';
 
 export { newStep, stepNames, stepSummary, type Step, type StepOf, type StepType } from './steps.ts';
 
@@ -26,12 +26,32 @@ export type BindingOf<K extends Binding['kind']> = Extract<Binding, { kind: K }>
 // Macro salva pelo app (struct Macro em src-tauri/src/config.rs).
 export interface Macro { layer: number; slot: number; mods: number; code: number; multi: boolean; steps: Step[]; mode: AppMode; alt: Step[]; profiles: Profile[] }
 
+// Ação exclusiva da página remota do celular (não é gravada no macropad).
+// "folder" diferente de zero transforma o botão num atalho para a pasta com esse id.
+// "image" é um data URL; "fit" diz se a imagem fica no lugar do ícone ou cobre a tecla inteira.
+export type ImageFit = '' | 'icon' | 'cover';
+export interface MobileButton { slot: number; folder: number; text: string; icon: string; color: string; image: string; fit: ImageFit; multi: boolean; steps: Step[]; mode: AppMode; alt: Step[]; profiles: Profile[] }
+// Pasta: outra página de 15 botões; o botão 1 é sempre o "Voltar".
+export interface MobileFolder { id: number; name: string; buttons: MobileButton[] }
+export interface MobilePage { buttons: MobileButton[]; folders: MobileFolder[] }
+export const MOBILE_MAX_FOLDER = 155;
+
 // Ação do app com os campos opcionais preenchidos, para comparar e salvar.
 export function appParts(binding: BindingOf<'app'>) {
   return { multi: binding.multi, steps: binding.steps, mode: binding.mode ?? 'normal', alt: binding.alt ?? [], profiles: binding.profiles ?? [] };
 }
 
-export const knobSlot = (index: number, action: number) => 16 + index * 3 + action;
+// Etapas do app que reproduzem uma ação gravada no aparelho (atalho ou mídia): usadas para testar
+// sem gravar e para o celular executar essas teclas pelo app. null quando não há equivalente.
+const mediaSteps = new Map<number, MediaKey>([[0xe9, 'volumeUp'], [0xea, 'volumeDown'], [0xe2, 'mute'], [0xcd, 'playPause'], [0xb5, 'next'], [0xb6, 'prev']]);
+export function equivalentSteps(binding: Binding): Step[] | null {
+  if (binding.kind === 'app') return binding.steps;
+  if (binding.kind === 'key' && binding.code) return [{ type: 'hotkey', mods: binding.mods, code: binding.code }];
+  if (binding.kind === 'media' && mediaSteps.has(binding.media)) return [{ type: 'media', key: mediaSteps.get(binding.media)! }];
+  return null;
+}
+
+export const knobSlot =(index: number, action: number) => 16 + index * 3 + action;
 // Ordem física confirmada no aparelho: em cada knob, o slot 0 gira à esquerda e o slot 2, à direita.
 export const knobParts = [
   { name: 'Girar à esquerda', icon: 'rotateLeft' },
@@ -98,6 +118,23 @@ export function appBindingError(binding: BindingOf<'app'>): string | null {
     const error = firstError(profile.steps);
     if (error) return `Perfil de ${profile.app}: ${error}`;
   }
+  return null;
+}
+
+export function isRotaryOnlyStep(step: Step): boolean {
+  if (step.type === 'brightness') return true;
+  if (step.type === 'audio') return step.action === 'up' || step.action === 'down';
+  if (step.type === 'obs') return step.action === 'volume';
+  if (step.type === 'mouse') return step.action.startsWith('scroll');
+  if (step.type === 'voicemeeter') return step.mode === 'add';
+  return false;
+}
+
+export function rotaryOnlyError(slot: number, binding: Binding): string | null {
+  if (binding.kind !== 'app') return null;
+  const rotary = slot >= 16 && (slot - 16) % 3 !== 1;
+  const steps = [...binding.steps, ...(binding.alt ?? []), ...(binding.profiles ?? []).flatMap(profile => profile.steps)];
+  if (steps.some(isRotaryOnlyStep) && !rotary) return 'Esta ação incremental só pode ser usada na rotação esquerda/direita de um knob.';
   return null;
 }
 

@@ -84,9 +84,9 @@
 .keycap.drop-target, .knob-press.drop-target { outline: max(2px, calc(.45 * var(--u))) dashed var(--accent); outline-offset: max(3px, calc(1 * var(--u))); }
 .keycap.dirty::after, .knob-press.dirty .knob-indicator::after { content: ""; position: absolute; z-index: 2; top: 10%; right: 14%; width: calc(1.6 * var(--u)); height: calc(1.6 * var(--u)); min-width: 5px; min-height: 5px; border-radius: 50%; background: var(--pending); box-shadow: 0 0 0 2px #0006; }
 .knob-press.dirty::after { box-shadow: inset 0 0 0 calc(.35 * var(--u)) #1d1e21, inset 0 calc(.45 * var(--u)) calc(.35 * var(--u)) #ffffff2b, inset 0 -calc(.6 * var(--u)) calc(.9 * var(--u)) #000a, 0 0 0 max(2px, calc(.4 * var(--u))) var(--pending); }
-.keycap.pressed { transform: translateY(calc(.35 * var(--u))); box-shadow: inset 0 1px 0 #ffffff1c, 0 0 0 calc(.55 * var(--u)) #0b0b0c, 0 0 0 calc(.75 * var(--u)) #ffffff0f, 0 calc(.4 * var(--u)) calc(.6 * var(--u)) #000b; }
-.knob-press.pressed { transform: scale(.94); }
-.keycap.pressed::before { background: radial-gradient(130% 100% at 50% 0%, #3a5b8f, #2a4573 60%, #243d66); }
+.keycap.pressed { transform: translateY(calc(.7 * var(--u))); box-shadow: inset 0 1px 0 #ffffff12, 0 0 0 calc(.55 * var(--u)) #0b0b0c, 0 0 0 calc(.75 * var(--u)) #ffffff08, 0 calc(.25 * var(--u)) calc(.55 * var(--u)) #000d; }
+.knob-press.pressed { transform: translateY(calc(.35 * var(--u))) scale(.96); }
+.keycap.pressed::before { background: radial-gradient(130% 100% at 50% 0%, #45464a 0%, #303135 58%, #242528 100%); }
 /* O indicador do knob fica num disco do tamanho do knob, que gira junto com o knob do aparelho. */
 .knob-dial { position: absolute; inset: 0; z-index: 3; border-radius: 50%; pointer-events: none; transition: rotate 160ms ease-out; }
 /* Cor escolhida pelo usuário: tinge a legenda e acende a frente da keycap. */

@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Macropad">
+  <meta name="application-name" content="Macropad">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <title>Macropad Studio</title>
+  <style>
+    /* Painel de teclas em tela cheia: sem rolagem, a grade ocupa o maior tamanho que cabe e se
+       reorganiza ao girar o celular (5 × 3 deitado, 3 × 5 em pé). */
+    :root { color-scheme: dark; font-family: Inter, -apple-system, "Segoe UI", system-ui, sans-serif; background: #000; color: #f2f3f5; --safe-t: env(safe-area-inset-top, 0px); --safe-r: env(safe-area-inset-right, 0px); --safe-b: env(safe-area-inset-bottom, 0px); --safe-l: env(safe-area-inset-left, 0px); }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { position: fixed; inset: 0; margin: 0; overflow: hidden; overscroll-behavior: none; background: #000; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+    button { font: inherit; color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
+    [hidden] { display: none !important; }
+    .ico { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; display: block; }
+    .ico.brand { fill: currentColor; stroke: none; }
+
+    .app { position: absolute; inset: 0; display: flex; padding: calc(var(--safe-t) + 10px) calc(var(--safe-r) + 10px) calc(var(--safe-b) + 10px) calc(var(--safe-l) + 10px); background: radial-gradient(ellipse at 50% 40%, #0d0e12, #000 70%); }
+    .app.landscape { flex-direction: row; }
+    .app.portrait { flex-direction: column-reverse; }
+    .deck { position: relative; flex: 1; min-width: 0; min-height: 0; display: grid; place-items: center; }
+    .rail { flex: none; display: flex; align-items: center; gap: 10px; color: #8d919b; }
+    .landscape .rail { flex-direction: column; width: 46px; padding-top: 4px; }
+    .portrait .rail { flex-direction: row-reverse; height: 44px; padding: 0 2px; }
+    .rail-button { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; color: #a3a7b0; }
+    .rail-button:active { background: #ffffff14; color: #fff; }
+    .rail-button svg { width: 24px; height: 24px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b6f78; }
+    .status-dot.ok { background: #3ddc84; box-shadow: 0 0 8px #3ddc8488; }
+    .status-dot.bad { background: #ff6b6b; box-shadow: 0 0 8px #ff6b6b88; }
+    .rail-title { flex: 1; min-width: 0; overflow: hidden; color: #c9ccd3; font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .landscape .rail-title { display: none; }
+
+    /* Grade: --k (lado da tecla) e --g (vão) são calculados em layout(). */
+    .grid { display: grid; gap: var(--g); grid-template-columns: repeat(var(--cols), var(--k)); grid-auto-rows: var(--k); }
+    .physical { display: flex; gap: var(--sep); align-items: center; }
+    .portrait .physical { flex-direction: column; }
+    .knob-row-title { display: none; }
+
+    .key { position: relative; width: var(--k); height: var(--k); padding: calc(var(--k) * .065); border-radius: calc(var(--k) * .2); background: linear-gradient(180deg, #2b2c31, #0c0d10 60%, #18191d); box-shadow: inset 0 0 0 1px #3b3d44, inset 0 1px 0 #ffffff1c, 0 calc(var(--k) * .04) calc(var(--k) * .12) #000c; transition: transform 80ms, filter 80ms; touch-action: none; }
+    .face { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(var(--k) * .04); width: 100%; height: 100%; overflow: hidden; border-radius: calc(var(--k) * .14); background: var(--face, #17181c); color: #fff; box-shadow: inset 0 0 0 1px #ffffff12, inset 0 calc(var(--k) * -.03) calc(var(--k) * .08) #0006; }
+    .key.colored .face { background: linear-gradient(180deg, color-mix(in srgb, var(--c) 82%, #fff), var(--c) 22%, var(--c) 78%, color-mix(in srgb, var(--c) 70%, #000)); box-shadow: inset 0 0 0 1px #ffffff26, inset 0 calc(var(--k) * -.03) calc(var(--k) * .08) #0004; }
+    .key.colored { box-shadow: inset 0 0 0 1px #3b3d44, inset 0 1px 0 #ffffff1c, 0 calc(var(--k) * .04) calc(var(--k) * .12) #000c, 0 0 calc(var(--k) * .3) color-mix(in srgb, var(--c) 45%, transparent); }
+    /* Bordas de brilho no alto e embaixo da tampa, como uma tecla de verdade. */
+    .face::before, .face::after { content: ""; position: absolute; left: 7%; right: 7%; border-radius: calc(var(--k) * .08); pointer-events: none; }
+    .face::before { top: 3%; height: 14%; background: linear-gradient(180deg, #ffffff38, #ffffff06); }
+    .face::after { bottom: 3%; height: 9%; background: linear-gradient(180deg, #ffffff00, #ffffff1f); }
+    .glyph { width: calc(var(--k) * .44); height: calc(var(--k) * .44); filter: drop-shadow(0 1px 2px #0007); }
+    .labelled .glyph { width: calc(var(--k) * .36); height: calc(var(--k) * .36); }
+    .label { max-width: 92%; max-height: 2.4em; overflow: hidden; font-size: max(9px, calc(var(--k) * .12)); font-weight: 650; line-height: 1.2; text-align: center; overflow-wrap: anywhere; text-shadow: 0 1px 3px #000a; }
+    .key:not(.has-glyph) .label { font-size: max(10px, calc(var(--k) * .15)); }
+    .key.empty { pointer-events: none; }
+    .key.empty .face { background: #0b0b0d; }
+    .key.empty .face::before, .key.empty .face::after { opacity: .35; }
+    .key.locked { opacity: .45; }
+    .key.locked .face::after { opacity: 0; }
+    .repeat-mark { position: absolute; left: 9%; top: 9%; width: calc(var(--k) * .14); height: calc(var(--k) * .14); opacity: .65; }
+    .key.back .face { background: #1b1c21; color: #d6d9e0; }
+    .key.folder .face { color: #fff; }
+    .folder-mark { position: absolute; right: 9%; bottom: 9%; width: calc(var(--k) * .15); height: calc(var(--k) * .15); opacity: .7; }
+    .key.pressed, .key:active:not(.empty) { transform: scale(.93); filter: brightness(1.3); }
+    .key.knob .glyph { width: calc(var(--k) * .34); height: calc(var(--k) * .34); }
+    .glyph img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+    .key.cover .face { justify-content: flex-end; padding-bottom: 9%; background-color: #0b0b0d; background-position: center; background-size: cover; background-repeat: no-repeat; }
+    .key.cover .label { padding: 1px 6px; border-radius: 6px; background: #0008; }
+
+    .banner { position: fixed; top: calc(var(--safe-t) + 10px); left: 50%; z-index: 3; max-width: min(86vw, 520px); padding: 8px 14px; border: 1px solid #ff8d8d55; border-radius: 999px; background: #2a1416ee; color: #ffb3b3; font-size: 12px; line-height: 1.35; text-align: center; transform: translateX(-50%); overflow-wrap: anywhere; }
+
+    .sheet { position: fixed; inset: 0; z-index: 4; display: grid; place-items: center; padding: 16px; background: #000b; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+    .sheet-card { width: min(100%, 420px); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid #2c2f36; border-radius: 20px; background: #15161a; box-shadow: 0 20px 60px #000; }
+    .sheet-head { display: flex; align-items: center; gap: 10px; }
+    .sheet-head strong { flex: 1; font-size: 16px; }
+    .status { color: #9ea4b0; font-size: 12px; }
+    .status.ok { color: #62e29a; }
+    .status.bad { color: #ff8d8d; }
+    .close { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: #23252b; color: #c5c8cf; font-size: 18px; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #a9aeb8; font-size: 13px; }
+    .seg { display: flex; gap: 3px; padding: 3px; border-radius: 11px; background: #0d0e11; }
+    .seg button { min-width: 44px; height: 34px; padding: 0 12px; border-radius: 8px; color: #a9aeb8; font-size: 13px; font-weight: 650; }
+    .seg button.active { background: #2c2f37; color: #fff; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .action { flex: 1; min-width: 140px; height: 40px; border-radius: 11px; background: #23252b; color: #e3e5ea; font-size: 13px; font-weight: 650; }
+    .action.danger { color: #ff9b9b; }
+    .hint { margin: 0; color: #7d828c; font-size: 12px; line-height: 1.45; }
+
+    .action.primary { background: #3d6cff; color: #fff; }
+
+    /* Convite para instalar como app, na primeira visita pelo navegador. */
+    .install { position: fixed; left: 50%; bottom: calc(var(--safe-b) + 12px); z-index: 3; display: flex; align-items: center; gap: 12px; width: min(calc(100vw - 24px), 460px); padding: 12px 12px 12px 14px; border: 1px solid #30333b; border-radius: 18px; background: #15161aee; box-shadow: 0 16px 40px #000c; transform: translateX(-50%); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+    .install img { flex: none; border-radius: 11px; }
+    .install strong { display: block; font-size: 14px; }
+    .install p { margin: 2px 0 0; color: #a9aeb8; font-size: 12px; line-height: 1.4; }
+    .install > div:nth-child(2) { flex: 1; min-width: 0; }
+    .install-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+    .install-go { height: 36px; padding: 0 14px; border-radius: 10px; background: #3d6cff; color: #fff; font-size: 13px; font-weight: 700; }
+    .install-close { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: #9ea4b0; font-size: 20px; }
+  </style>
+</head>
+<body>
+  <div id="app" class="app landscape">
+    <main id="deck" class="deck" aria-label="Botões"></main>
+    <aside class="rail">
+      <button id="menu-button" class="rail-button" type="button" aria-label="Configurações"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <span id="status-dot" class="status-dot" role="img" aria-label="Conexão"></span>
+      <span id="title" class="rail-title"></span>
+    </aside>
+  </div>
+  <p id="connection-detail" class="banner" role="status" hidden></p>
+
+  <div id="sheet" class="sheet" hidden>
+    <div class="sheet-card" role="dialog" aria-label="Configurações">
+      <div class="sheet-head"><strong>Macropad Studio</strong><span id="status" class="status">Conectando…</span><button id="sheet-close" class="close" type="button" aria-label="Fechar">×</button></div>
+      <div class="row"><span>Página</span><div class="seg"><button id="view-mobile" type="button" class="active">Celular</button><button id="view-physical" type="button">Macropad</button></div></div>
+      <div id="layer-row" class="row" hidden><span>Camada</span><div id="layers" class="seg"></div></div>
+      <div class="actions"><button id="install-button" class="action primary" type="button">Instalar app</button><button id="fullscreen" class="action" type="button">Tela cheia</button></div>
+      <p id="view-hint" class="hint">Esta página é exclusiva do celular e não altera o firmware. Gire o celular para trocar entre 5 × 3 e 3 × 5.</p>
+    </div>
+  </div>
+
+  <div id="install" class="install" role="dialog" aria-label="Instalar como app" hidden>
+    <img src="/icon-192.png" alt="" width="44" height="44">
+    <div><strong>Instalar como app</strong><p id="install-text"></p></div>
+    <div class="install-actions"><button id="install-go" class="install-go" type="button">Instalar</button><button id="install-close" class="install-close" type="button" aria-label="Agora não">×</button></div>
+  </div>
+  <script>
+    (() => {
+      const ICONS = {/*ICONS*/};
+      const $ = (id) => document.getElementById(id);
+      const state = { data: null, view: 'mobile', page: 0, stack: [], layer: 1, layerChosen: false, socket: null, reconnectTimer: null, pingTimer: null };
+      const viewKey = 'macropad-mobile-view', installKey = 'macropad-install-dismissed';
+      const browser = typeof window !== 'undefined';
+      const held = new Set();
+      try { if (localStorage.getItem(viewKey) === 'physical') state.view = 'physical'; } catch {}
+
+      function svg(name) {
+        const line = (ICONS.line || {})[name], brand = (ICONS.brand || {})[name];
+        if (brand) return `<svg class="ico brand" viewBox="0 0 24 24" aria-hidden="true"><path d="${brand}"/></svg>`;
+        return line ? `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${line}</svg>` : '';
+      }
+      function setStatus(text, tone = '') { $('status').textContent = text; $('status').className = `status ${tone}`; $('status-dot').className = `status-dot ${tone}`; }
+      function setConnectionDetail(text) { const detail = $('connection-detail'); detail.textContent = text; detail.hidden = !text; }
+
+      // Página atual do celular: a principal ou uma pasta (que pode ter sido apagada no computador).
+      function folderById(id) { return (state.data?.state?.folders || []).find(folder => folder.id === id); }
+      function currentSlots() {
+        if (state.page && !folderById(state.page)) { state.page = 0; state.stack = []; }
+        return state.page ? folderById(state.page).slots : (state.data?.state?.mobile || []);
+      }
+      function openFolder(id) { if (!folderById(id)) return; state.stack.push(state.page); state.page = id; render(); }
+      function goBack() { state.page = state.stack.pop() || 0; render(); }
+
+      function makeKey(slot, source, extra = {}) {
+        const button = document.createElement('button');
+        const glyphName = slot.icon || extra.glyph || (slot.kind === 'back' ? 'back' : slot.kind === 'folder' ? 'folder' : slot.kind === 'hid' ? 'keyboard' : slot.kind === 'app' ? 'bolt' : '');
+        const label = slot.kind === 'back' ? 'Voltar' : slot.label || extra.label || '';
+        // Imagem do botão: "cover" ocupa a tampa inteira; "icon" fica no lugar do ícone.
+        const cover = Boolean(slot.image) && slot.fit === 'cover' && slot.kind !== 'empty';
+        const picture = Boolean(slot.image) && !cover && slot.kind !== 'empty';
+        const glyph = slot.kind === 'empty' || cover ? '' : picture ? `<img src="${slot.image}" alt="" draggable="false">` : svg(glyphName);
+        button.type = 'button';
+        button.className = `key ${slot.kind}${cover ? ' cover' : ''}${slot.kind === 'hid' && !slot.executable ? ' locked' : ''}${slot.color && slot.kind !== 'empty' ? ' colored' : ''}${glyph ? ' has-glyph' : ''}${glyph && label ? ' labelled' : ''}${extra.className ? ` ${extra.className}` : ''}`;
+        button.dataset.slot = slot.slot; button.dataset.source = source;
+        if (source === 'mobile') button.dataset.page = state.page;
+        if (slot.color) button.style.setProperty('--c', slot.color);
+        button.setAttribute('aria-label', label || (slot.kind === 'empty' ? 'Vazio' : `Botão ${slot.slot}`));
+        const face = document.createElement('span'); face.className = 'face';
+        if (cover) face.style.backgroundImage = `url("${slot.image}")`;
+        if (glyph) { const holder = document.createElement('span'); holder.className = 'glyph'; holder.innerHTML = glyph; face.append(holder); }
+        if (label) { const text = document.createElement('span'); text.className = 'label'; text.textContent = label; face.append(text); }
+        if (slot.kind === 'folder' && slot.icon && slot.icon !== 'folder') { const mark = document.createElement('span'); mark.className = 'folder-mark'; mark.innerHTML = svg('folder'); face.append(mark); }
+        if (slot.repeat && source === 'mobile') { const mark = document.createElement('span'); mark.className = 'repeat-mark'; mark.innerHTML = svg('refresh'); face.append(mark); }
+        button.append(face);
+        if (slot.kind === 'back') { button.onclick = goBack; return button; }
+        if (slot.kind === 'folder') { button.onclick = () => openFolder(slot.folder); return button; }
+        if (!slot.executable) { button.disabled = slot.kind === 'empty'; return button; }
+        const page = state.page, layer = state.layer;
+        const message = (down) => source === 'mobile' ? { type: 'trigger', source, page, layer: null, slot: slot.slot, down } : { type: 'trigger', source, layer, slot: slot.slot, down };
+        // Ações incrementais e giros de knob repetem enquanto o dedo fica no botão, como girar o knob.
+        let repeatTimer = null;
+        const tick = (delay) => { repeatTimer = setTimeout(() => { send(message(true)); send(message(false)); tick(110); }, delay); };
+        const release = () => {
+          if (!held.delete(release)) return;
+          button.classList.remove('pressed');
+          if (repeatTimer !== null) { clearTimeout(repeatTimer); repeatTimer = null; }
+          if (!slot.repeat) send(message(false));
+        };
+        const down = (event) => {
+          event.preventDefault(); button.classList.add('pressed'); button.setPointerCapture?.(event.pointerId);
+          held.add(release);
+          send(message(true));
+          if (slot.repeat) { send(message(false)); tick(380); }
+        };
+        const up = (event) => { event.preventDefault(); release(); };
+        button.addEventListener('pointerdown', down); button.addEventListener('pointerup', up); button.addEventListener('pointercancel', up);
+        button.addEventListener('lostpointercapture', up);
+        return button;
+      }
+
+      // Tamanho da tecla: o maior que cabe na área livre, contando os vãos (e o espaço entre teclas e knobs).
+      const GAP = .16, SEP = .45;
+      function fit(cols, rows, sepW = 0, sepH = 0) {
+        const deck = $('deck');
+        const width = deck.clientWidth, height = deck.clientHeight;
+        const k = Math.max(36, Math.floor(Math.min(width / (cols + (cols - 1) * GAP + sepW * SEP), height / (rows + (rows - 1) * GAP + sepH * SEP), 190)));
+        deck.style.setProperty('--k', `${k}px`); deck.style.setProperty('--g', `${Math.round(k * GAP)}px`); deck.style.setProperty('--sep', `${Math.round(k * SEP)}px`);
+      }
+      function grid(cols, children) { const element = document.createElement('div'); element.className = 'grid'; element.style.setProperty('--cols', cols); element.append(...children); return element; }
+
+      function renderMobile(landscape) {
+        const slots = new Map(currentSlots().map(slot => [slot.slot, slot]));
+        const cols = landscape ? 5 : 3;
+        fit(cols, landscape ? 3 : 5);
+        const keys = Array.from({ length: 15 }, (_, index) => makeKey(slots.get(index + 1) || { slot: index + 1, kind: state.page && index === 0 ? 'back' : 'empty' }, 'mobile'));
+        $('deck').replaceChildren(grid(cols, keys));
+        $('title').textContent = state.page ? folderById(state.page)?.name || 'Pasta' : 'Celular';
+      }
+
+      // Espelho do macropad: deitado como no editor (slots 1–12 em ordem de leitura); em pé como o
+      // aparelho (linha de cima 4/8/12, de baixo 1/5/9). Os knobs ficam ao lado ou embaixo.
+      function renderPhysical(landscape) {
+        const layers = state.data?.state?.physical || [];
+        const layer = layers.find(item => item.layer === state.layer) || { slots: [] };
+        const slots = new Map((layer.slots || []).map(item => [item.slot, item]));
+        const at = (number, fallback = {}) => slots.get(number) || { slot: number, kind: 'empty', ...fallback };
+        const order = landscape ? Array.from({ length: 12 }, (_, i) => i + 1) : Array.from({ length: 12 }, (_, i) => (i % 3) * 4 + (4 - Math.floor(i / 3)));
+        landscape ? fit(7, 3, 1, 0) : fit(3, 7, 0, 1);
+        const keys = grid(landscape ? 4 : 3, order.map(number => makeKey(at(number), 'physical')));
+        const parts = [['rotateLeft', 'Esquerda'], ['press', 'Pressionar'], ['rotateRight', 'Direita']];
+        const knobs = grid(3, [0, 1, 2].flatMap(knob => parts.map(([glyph], part) => makeKey(at(16 + knob * 3 + part), 'physical', { glyph, className: 'knob', label: part === 1 ? `Knob ${knob + 1}` : '' }))));
+        const wrap = document.createElement('div'); wrap.className = 'physical'; wrap.append(keys, knobs);
+        $('deck').replaceChildren(wrap);
+        $('title').textContent = `Macropad · Camada ${state.layer}`;
+      }
+
+      function renderSheet() {
+        $('view-mobile').className = state.view === 'mobile' ? 'active' : '';
+        $('view-physical').className = state.view === 'physical' ? 'active' : '';
+        $('layer-row').hidden = state.view !== 'physical';
+        $('view-hint').textContent = state.view === 'mobile'
+          ? 'Esta página é exclusiva do celular e não altera o firmware. Gire o celular para trocar entre 5 × 3 e 3 × 5.'
+          : 'Atalhos e mídia gravados no aparelho também funcionam daqui, executados pelo app. Segure um giro de knob para repetir. Botões apagados têm ações que só o macropad entende.';
+        $('layers').replaceChildren(...[1, 2, 3].map(number => {
+          const button = document.createElement('button'); button.type = 'button'; button.textContent = String(number);
+          button.className = number === state.layer ? 'active' : '';
+          button.onclick = () => { state.layer = number; state.layerChosen = true; render(); };
+          return button;
+        }));
+      }
+
+      // Botões segurados: soltos antes de redesenhar a grade ou quando o celular sai do app, para que
+      // nenhuma repetição continue sem o dedo na tela.
+      function releaseAll() { [...held].forEach(release => release()); }
+      function render() {
+        if (!state.data || !browser) return;
+        releaseAll();
+        const landscape = window.innerWidth >= window.innerHeight;
+        $('app').className = `app ${landscape ? 'landscape' : 'portrait'}`;
+        if (state.view === 'physical') renderPhysical(landscape); else renderMobile(landscape);
+        renderSheet();
+      }
+      function setView(view) { state.view = view; try { localStorage.setItem(viewKey, view); } catch {} render(); }
+
+      function send(message) { if (state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify(message)); }
+      function reconnectLater() {
+        if (state.reconnectTimer !== null) return;
+        state.reconnectTimer = setTimeout(() => { state.reconnectTimer = null; connect(); }, 2000);
+      }
+      function flash(message) {
+        const source = message.source || 'physical';
+        const selector = source === 'mobile' ? `[data-source="mobile"][data-page="${message.page || 0}"][data-slot="${message.slot}"]` : `[data-source="physical"][data-slot="${message.slot}"]`;
+        if (source === 'physical' && message.layer && message.layer !== state.layer) return;
+        const target = document.querySelector(selector);
+        if (target && message.down) { target.classList.add('pressed'); setTimeout(() => target.classList.remove('pressed'), 220); }
+      }
+      function connect() {
+        if (state.socket && state.socket.readyState <= WebSocket.OPEN) return;
+        if (state.reconnectTimer !== null) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
+        const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
+        let socket;
+        try { socket = new WebSocket(url); }
+        catch { setStatus('Reconectando…', 'bad'); reconnectLater(); return; }
+        state.socket = socket;
+        setStatus($('connection-detail').hidden ? 'Conectando…' : 'Reconectando…', $('connection-detail').hidden ? '' : 'bad');
+        // Sem pareamento: o computador envia o estado assim que a conexão abre.
+        socket.onmessage = (event) => {
+          if (state.socket !== socket) return;
+          let message; try { message = JSON.parse(event.data); } catch { return; }
+          if (message.type === 'state') {
+            state.data = message;
+            if (!state.layerChosen) state.layer = message.state?.detectedLayer || 1;
+            render(); setStatus('Conectado', 'ok'); setConnectionDetail('');
+            if (state.pingTimer === null) state.pingTimer = setInterval(() => {
+              if (state.socket === socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping' }));
+            }, 15000);
+          } else if (message.type === 'fired') {
+            flash(message);
+          } else if (message.type === 'error') {
+            setConnectionDetail(message.message || 'Erro na conexão.');
+          }
+        };
+        socket.onerror = () => { if (state.socket === socket && $('connection-detail').hidden) setConnectionDetail('Falha na conexão WebSocket. Tentando novamente…'); };
+        socket.onclose = (event) => {
+          if (state.socket !== socket) return;
+          state.socket = null;
+          if (state.pingTimer !== null) { clearInterval(state.pingTimer); state.pingTimer = null; }
+          if ($('connection-detail').hidden) setConnectionDetail(event.reason || `Conexão interrompida (${event.code}). Tentando novamente…`);
+          setStatus('Reconectando…', 'bad'); reconnectLater();
+        };
+      }
+      // Instalar como app. O Chrome do Android oferece o próprio convite (beforeinstallprompt) quando a
+      // página pode ser instalada; no iPhone, e quando o convite não vem, mostramos o passo a passo.
+      let installPrompt = null;
+      function installed() {
+        if (!browser) return false;
+        const mode = (query) => window.matchMedia?.(query).matches;
+        return mode('(display-mode: standalone)') || mode('(display-mode: fullscreen)') || navigator.standalone === true;
+      }
+      function installSteps() {
+        const ios = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        return ios
+          ? 'No Safari, toque em Compartilhar (o quadrado com a seta) e depois em “Adicionar à Tela de Início”.'
+          : 'No Chrome, abra o menu ⋮ e toque em “Instalar app” ou “Adicionar à tela inicial”.';
+      }
+      function offerInstall(force = false) {
+        if (installed()) return;
+        try { if (!force && localStorage.getItem(installKey)) return; } catch {}
+        $('install-text').textContent = installPrompt ? 'Abra o Macropad em tela cheia, direto da tela inicial do celular.' : installSteps();
+        $('install-go').hidden = !installPrompt;
+        $('install').hidden = false;
+        // O convite cobre a última fileira: some sozinho e não volta (a engrenagem tem "Instalar app").
+        if (!force) setTimeout(() => { $('install').hidden = true; try { localStorage.setItem(installKey, '1'); } catch {} }, 15000);
+      }
+      async function install() {
+        if (!installPrompt) { offerInstall(true); return; }
+        const prompt = installPrompt; installPrompt = null;
+        prompt.prompt();
+        await prompt.userChoice?.catch(() => null);
+        $('install').hidden = true;
+      }
+      $('install-go').onclick = install;
+      $('install-close').onclick = () => { $('install').hidden = true; try { localStorage.setItem(installKey, '1'); } catch {} };
+      $('install-button').onclick = () => { $('sheet').hidden = true; install(); };
+      $('menu-button').onclick = () => { renderSheet(); $('install-button').hidden = installed(); $('sheet').hidden = false; };
+      $('sheet-close').onclick = () => { $('sheet').hidden = true; };
+      $('sheet').onclick = (event) => { if (event.target === $('sheet')) $('sheet').hidden = true; };
+      $('view-mobile').onclick = () => setView('mobile');
+      $('view-physical').onclick = () => setView('physical');
+      if (browser) {
+        const root = document.documentElement;
+        window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); installPrompt = event; offerInstall(); });
+        window.addEventListener('appinstalled', () => { installPrompt = null; $('install').hidden = true; });
+        setTimeout(() => offerInstall(), 1500);
+        // O service worker só é aceito em HTTPS ou em endereços liberados como seguros no navegador.
+        if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
+        $('fullscreen').hidden = !root.requestFullscreen;
+        $('fullscreen').onclick = () => { (document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen({ navigationUI: 'hide' })).catch(() => {}); $('sheet').hidden = true; };
+        // Recalcula a grade ao girar ou redimensionar, e bloqueia o menu de toque longo nos botões.
+        let frame = 0;
+        const relayout = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(render); };
+        window.addEventListener('resize', relayout);
+        window.addEventListener('orientationchange', () => setTimeout(relayout, 120));
+        document.addEventListener('contextmenu', event => event.preventDefault());
+        document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
+        window.addEventListener('blur', releaseAll);
+      }
+      connect();
+    })();
+  </script>
+</body>
+</html>

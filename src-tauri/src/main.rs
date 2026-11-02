@@ -1,18 +1,22 @@
-// Macropad Studio: janela de configuração, ícone na bandeja e executor das teclas virtuais.
+// Macropad Studio: janela de configuração, ícone na bandeja e executor das ações do macropad.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod audio;
 mod config;
 mod device;
+mod device_watch;
+mod device_input;
 mod executor;
 mod integrations;
+mod mobile;
 mod obs;
 mod secrets;
 mod system;
 mod virtual_keys;
 
-use config::{Config, Label, Macro, Settings, Step};
+use config::{mobile_page_of, Config, Label, Macro, MobilePage, Settings, Step, MOBILE_MAX_FOLDER};
 use device::Hid;
+use device_input::DeviceInput;
 use executor::{Job, Outcome};
 use obs::{Obs, ObsStatus};
 use serde::Serialize;
@@ -35,8 +39,8 @@ use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::UpdaterExt;
 
 const HIDDEN_ARG: &str = "--hidden";
+const ELEVATED_RELAUNCH_ARG: &str = "--macropad-elevated-relaunch";
 const OBS_SECRET: &str = "obs";
-const HOME_ASSISTANT_SECRET: &str = "homeassistant";
 const LOG_LIMIT: u64 = 1024 * 1024;
 
 struct AppState {
@@ -47,8 +51,9 @@ struct AppState {
     log_path: PathBuf,
     jobs: Mutex<mpsc::Sender<Job>>,
     obs: &'static Obs,
-    // Última camada de onde veio uma tecla virtual: é a camada ativa no macropad.
+    // Última camada de onde veio uma ação do macropad: é a camada ativa no aparelho.
     detected_layer: Mutex<Option<u8>>,
+    mobile: Arc<mobile::MobileServer>,
 }
 
 struct Tray {
@@ -129,31 +134,49 @@ struct AppHost(AppHandle);
 
 impl executor::Host for AppHost {
     fn lookup(&self, layer: u8, slot: u8) -> Option<Macro> {
-        state(&self.0).config.lock().unwrap().macros.iter().find(|item| item.layer == layer && item.slot == slot).cloned()
+        let app_state = state(&self.0);
+        let config = app_state.config.lock().unwrap();
+        if let Some(page) = mobile_page_of(layer) {
+            return config.mobile.button(page, slot).filter(|item| item.folder == 0).map(|item| item.as_macro(layer));
+        }
+        config.macros.iter().find(|item| item.layer == layer && item.slot == slot).cloned()
     }
 
     fn obs(&self) -> &'static Obs {
         state(&self.0).obs
     }
 
-    fn home_assistant(&self) -> (String, String) {
-        let url = state(&self.0).config.lock().unwrap().settings.homeassistant.url.clone();
-        (url, secrets::read(HOME_ASSISTANT_SECRET).unwrap_or_default())
-    }
-
     fn pressed(&self, layer: u8, slot: u8, down: bool) {
+        // Cada ação recebida fica no log: é o primeiro lugar para olhar quando uma ação do app não
+        // faz nada (o macropad chegou? a ação rodou?).
+        let mobile = mobile_page_of(layer).is_some();
+        let source = if mobile { "celular" } else { "macropad" };
+        append_log(&state(&self.0).log_path, &format!("Entrada do {source}: camada {layer}, slot {slot} ({})", if down { "desce" } else { "sobe" }));
+        state(&self.0).mobile.broadcast_fired(layer, slot, down);
         if !down {
+            return;
+        }
+        if mobile {
             return;
         }
         self.0.emit("macro-fired", (layer, slot)).ok();
         let changed = state(&self.0).detected_layer.lock().unwrap().replace(layer) != Some(layer);
         if changed {
+            state(&self.0).mobile.set_detected_layer(Some(layer));
             update_tray_tooltip(&self.0);
+            let enabled = state(&self.0).config.lock().unwrap().settings.osd;
+            if enabled {
+                show_osd(&self.0, Osd { title: format!("Camada {layer}"), detail: "Ativa no macropad".into(), tone: "info" });
+            }
         }
     }
 
     fn report(&self, origin: Option<(u8, u8)>, steps: &[Step], outcome: Outcome) {
         let app = &self.0;
+        if let Some((layer, slot)) = origin {
+            let result = outcome.error.as_deref().map_or_else(|| "concluída".to_string(), |error| format!("falhou: {error}"));
+            append_log(&state(app).log_path, &format!("Ação da {} {}, slot {} ({} etapas): {result}", if mobile_page_of(layer).is_some() { "página mobile" } else { "camada" }, layer, slot, steps.len()));
+        }
         for warning in &outcome.warnings {
             alert(app, warning);
         }
@@ -166,7 +189,11 @@ impl executor::Host for AppHost {
         if !config.settings.osd {
             return;
         }
-        let label = config.labels.iter().find(|label| label.layer == layer && label.slot == slot).map(|label| label.text.trim().to_string()).filter(|text| !text.is_empty());
+        let label = if let Some(page) = mobile_page_of(layer) {
+            config.mobile.button(page, slot).map(|button| button.text.trim().to_string()).filter(|text| !text.is_empty())
+        } else {
+            config.labels.iter().find(|label| label.layer == layer && label.slot == slot).map(|label| label.text.trim().to_string()).filter(|text| !text.is_empty())
+        };
         drop(config);
         let title = label.or_else(|| steps.first().map(executor::describe)).unwrap_or_default();
         let (detail, tone) = match (&outcome.error, outcome.feedback.last()) {
@@ -232,7 +259,6 @@ fn labels_save(state: State<AppState>, labels: Vec<Label>) -> Result<(), String>
 struct SettingsView {
     settings: Settings,
     obs_password: bool,
-    home_assistant_token: bool,
 }
 
 #[tauri::command]
@@ -240,28 +266,128 @@ fn settings_get(state: State<AppState>) -> SettingsView {
     SettingsView {
         settings: state.config.lock().unwrap().settings.clone(),
         obs_password: secrets::read(OBS_SECRET).is_some(),
-        home_assistant_token: secrets::read(HOME_ASSISTANT_SECRET).is_some(),
     }
+}
+
+#[tauri::command]
+fn mobile_status(state: State<AppState>) -> mobile::MobileStatus {
+    state.mobile.status()
+}
+
+#[tauri::command]
+fn mobile_disconnect(state: State<AppState>) {
+    state.mobile.disconnect();
+}
+
+fn validate_mobile_page(page: &MobilePage) -> Result<(), String> {
+    let mut folders = std::collections::HashSet::new();
+    for folder in &page.folders {
+        if !(1..=MOBILE_MAX_FOLDER).contains(&folder.id) { return Err(format!("A pasta {} tem um identificador inválido.", folder.id)); }
+        if !folders.insert(folder.id) { return Err(format!("A pasta {} está repetida.", folder.id)); }
+        if folder.name.chars().count() > 48 { return Err(format!("O nome da pasta {} é muito longo.", folder.id)); }
+    }
+    let pages = std::iter::once((0, &page.buttons)).chain(page.folders.iter().map(|folder| (folder.id, &folder.buttons)));
+    for (id, buttons) in pages {
+        validate_mobile_buttons(id, buttons, &folders)?;
+    }
+    Ok(())
+}
+
+fn validate_mobile_buttons(page: u8, buttons: &[config::MobileButton], folders: &std::collections::HashSet<u8>) -> Result<(), String> {
+    let mut slots = std::collections::HashSet::new();
+    // Nas pastas, o botão 1 é o "Voltar".
+    let first = if page == 0 { 1 } else { 2 };
+    for button in buttons {
+        if !(first..=15).contains(&button.slot) { return Err(format!("O botão mobile deve estar entre {first} e 15.")); }
+        if !slots.insert(button.slot) { return Err(format!("O botão mobile {} está repetido.", button.slot)); }
+        if button.folder != 0 && !folders.contains(&button.folder) { return Err(format!("O botão {} abre uma pasta que não existe.", button.slot)); }
+        if button.folder != 0 && !button.steps.is_empty() { return Err(format!("O botão {} é uma pasta e não pode ter etapas.", button.slot)); }
+        if button.text.chars().count() > 48 { return Err(format!("A legenda do botão {} é muito longa.", button.slot)); }
+        if !button.color.is_empty() && !button.color.starts_with('#') { return Err(format!("A cor do botão {} é inválida.", button.slot)); }
+        if !button.image.is_empty() && config::decode_image(&button.image).is_none() { return Err(format!("A imagem do botão {} é inválida ou grande demais.", button.slot)); }
+        if !matches!(button.fit.as_str(), "" | "icon" | "cover") { return Err(format!("O ajuste da imagem do botão {} é inválido.", button.slot)); }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn mobile_page_get(state: State<AppState>) -> MobilePage {
+    state.config.lock().unwrap().mobile.clone()
+}
+
+#[tauri::command(async)]
+fn mobile_page_save(app: AppHandle, page: MobilePage) -> Result<(), String> {
+    validate_mobile_page(&page)?;
+    let state = state(&app);
+    let previous = {
+        let mut config = state.config.lock().unwrap();
+        let previous = config.mobile.clone();
+        config.mobile = page.clone();
+        if let Err(error) = save_config(&state, &config) {
+            config.mobile = previous.clone();
+            return Err(error);
+        }
+        previous
+    };
+    state.mobile.set_mobile_page(&page);
+    let _ = previous;
+    Ok(())
+}
+
+#[tauri::command]
+fn mobile_mirror_sync(state: State<AppState>, mirror: mobile::MobileMirror) {
+    if let Some(layer) = mirror.detected_layer.filter(|layer| (1..=3).contains(layer)) {
+        *state.detected_layer.lock().unwrap() = Some(layer);
+    }
+    state.mobile.sync_mirror(mirror);
 }
 
 // Senha e token: None mantém o que está guardado; texto vazio apaga. Assíncrono porque pode criar
 // a janela do OSD, e criar janelas num comando síncrono trava o Windows.
 #[tauri::command(async)]
-fn settings_save(app: AppHandle, settings: Settings, obs_password: Option<String>, home_assistant_token: Option<String>) -> Result<(), String> {
+fn settings_save(app: AppHandle, settings: Settings, obs_password: Option<String>) -> Result<(), String> {
     let state = state(&app);
     if let Some(password) = obs_password {
         secrets::write(OBS_SECRET, &password)?;
     }
-    if let Some(token) = home_assistant_token {
-        secrets::write(HOME_ASSISTANT_SECRET, &token)?;
+    let previous = {
+        let mut config = state.config.lock().unwrap();
+        let previous = config.settings.clone();
+        config.settings = settings.clone();
+        if let Err(error) = save_config(&state, &config) {
+            config.settings = previous.clone();
+            return Err(error);
+        }
+        previous
+    };
+    if let Err(error) = state.mobile.configure(settings.mobile.clone()) {
+        let mut config = state.config.lock().unwrap();
+        let old_mobile = previous.mobile.clone();
+        config.settings = previous;
+        save_config(&state, &config).ok();
+        state.mobile.configure(old_mobile).ok();
+        return Err(error);
     }
-    let mut config = state.config.lock().unwrap();
-    config.settings = settings.clone();
-    save_config(&state, &config)?;
-    drop(config);
     state.obs.configure(settings.obs, secrets::read(OBS_SECRET).unwrap_or_default());
+    system::set_sound_volume(settings.sound_volume);
     set_osd(&app, settings.osd);
+    if settings.always_admin && !system::is_elevated() {
+        system::relaunch_as_admin(&std::env::args().collect::<Vec<_>>())?;
+        app.exit(0);
+    }
     Ok(())
+}
+
+#[tauri::command]
+fn layer_detected(app: AppHandle, layer: u8) {
+    if !(1..=3).contains(&layer) {
+        return;
+    }
+    state(&app).detected_layer.lock().unwrap().replace(layer);
+    state(&app).mobile.set_detected_layer(Some(layer));
+    if state(&app).config.lock().unwrap().settings.osd {
+        show_osd(&app, Osd { title: format!("Camada {layer}"), detail: "Ativa no macropad".into(), tone: "info" });
+    }
 }
 
 #[tauri::command]
@@ -285,17 +411,6 @@ fn obs_scene_sources(state: State<AppState>, scene: String) -> Result<Vec<String
     state.obs.scene_sources(&scene)
 }
 
-#[tauri::command(async)]
-fn home_assistant_entities(state: State<AppState>) -> Result<Vec<integrations::Entity>, String> {
-    let url = state.config.lock().unwrap().settings.homeassistant.url.clone();
-    let token = secrets::read(HOME_ASSISTANT_SECRET).ok_or("Informe o token do Home Assistant nas Configurações.")?;
-    integrations::home_assistant_entities(&url, &token)
-}
-
-#[tauri::command]
-fn midi_ports() -> Vec<String> {
-    integrations::midi_ports()
-}
 
 // Programas com janela aberta agora, para escolher o perfil de uma ação.
 #[tauri::command]
@@ -524,21 +639,31 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
-fn spawn_device_watch(app: AppHandle) {
-    thread::spawn(move || {
-        let mut last = None;
-        loop {
-            // Durante uma leitura ou gravação o HID está ocupado; o estado é conferido no próximo ciclo.
-            let present = state(&app).hid.try_lock().ok().map(|mut hid| hid.present());
-            if let Some(present) = present {
-                if last != Some(present) {
-                    app.emit("device-changed", present).ok();
-                    last = Some(present);
+fn emit_device_state(app: &AppHandle) {
+    let app_state = state(app);
+    let Some(mut hid) = app_state.hid.try_lock().ok() else {
+        let retry = app.clone();
+        thread::spawn(move || {
+            for _ in 0..5 {
+                thread::sleep(Duration::from_millis(50));
+                let app_state = state(&retry);
+                let present = app_state.hid.try_lock().ok().map(|mut hid| hid.present());
+                if let Some(present) = present {
+                    retry.emit("device-changed", present).ok();
+                    if let Some(state) = retry.try_state::<AppState>() { state.mobile.set_device_present(present); }
+                    return;
                 }
             }
-            thread::sleep(Duration::from_secs(1));
-        }
-    });
+        });
+        return;
+    };
+    let present = hid.present();
+    app.emit("device-changed", present).ok();
+    app.state::<AppState>().mobile.set_device_present(present);
+}
+
+fn spawn_device_watch(app: AppHandle) {
+    device_watch::start(move || emit_device_state(&app));
 }
 
 // Linha de comando: "--run 1:3" aciona a camada 1, slot 3, como se a tecla fosse pressionada;
@@ -579,6 +704,15 @@ fn main() {
             if let Some(problem) = &problem {
                 append_log(&log_path, problem);
             }
+            if config.settings.always_admin && !system::is_elevated() && !std::env::args().any(|arg| arg == ELEVATED_RELAUNCH_ARG) {
+                match system::relaunch_as_admin(&std::env::args().collect::<Vec<_>>()) {
+                    Ok(()) => {
+                        app.handle().exit(0);
+                        return Ok(());
+                    }
+                    Err(error) => append_log(&log_path, &format!("Elevação automática: {error}")),
+                }
+            }
             let handle = app.handle().clone();
             let obs = Obs::start(config.settings.obs.clone(), secrets::read(OBS_SECRET).unwrap_or_default(), move |status| {
                 handle.emit("obs-state", status).ok();
@@ -588,7 +722,11 @@ fn main() {
             let jobs = executor::spawn(host);
             let fired = Mutex::new(jobs.clone());
             let osd = config.settings.osd;
-            let routes = virtual_keys::routes_for(&config.macros);
+            let mobile_settings = config.settings.mobile.clone();
+            let mobile_page = config.mobile.clone();
+            let mobile_server = mobile::MobileServer::new(app.handle().clone());
+            system::set_sound_volume(config.settings.sound_volume);
+            virtual_keys::set_routes(&config.macros);
             app.manage(AppState {
                 hid: Mutex::new(Hid::new()),
                 config: Mutex::new(config),
@@ -598,12 +736,26 @@ fn main() {
                 jobs: Mutex::new(jobs),
                 obs,
                 detected_layer: Mutex::new(None),
+                mobile: mobile_server.clone(),
             });
-            // O gancho só começa depois do estado registrado: o executor consulta as macros nele.
-            virtual_keys::start(move |layer, slot, down| {
-                fired.lock().unwrap().send(Job::Key(layer, slot, down)).ok();
+            mobile_server.set_mobile_page(&mobile_page);
+            if let Err(error) = mobile_server.configure(mobile_settings) {
+                append_log(&app.path().app_log_dir()?.join("activity.log"), &format!("Servidor mobile: {error}"));
+            }
+            // O Raw Input identifica o macropad, executa as ações do app e também alimenta o preview.
+            let input_app = app.handle().clone();
+            virtual_keys::start_filter();
+            device_input::start(move |input| {
+                if let DeviceInput::Key { mods, code, down } = &input {
+                    virtual_keys::observe_device_key(*mods, *code, *down);
+                    if !virtual_keys::paused() {
+                        if let Some((layer, slot)) = virtual_keys::route_for(*mods, *code) {
+                            fired.lock().unwrap().send(Job::Key(layer, slot, *down)).ok();
+                        }
+                    }
+                }
+                input_app.emit_to("main", "device-input", input).ok();
             });
-            virtual_keys::set_route_table(routes);
             spawn_device_watch(app.handle().clone());
             build_tray(app)?;
             set_osd(app.handle(), osd);
@@ -636,11 +788,15 @@ fn main() {
             labels_save,
             settings_get,
             settings_save,
+            mobile_status,
+            mobile_disconnect,
+            mobile_page_get,
+            mobile_page_save,
+            mobile_mirror_sync,
+            layer_detected,
             obs_status,
             obs_lists,
             obs_scene_sources,
-            home_assistant_entities,
-            midi_ports,
             running_apps,
             macro_test,
             macros_stop,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { functionGroups, keyNames, mainRows, modifierOptions, navigationRows, numpadKeys } from '../src/device/keys.ts';
 import {
-  appBindingError, decode, encode, equalBinding, keySlotForPosition, knobParts, knobSlot, labelFor, virtualCode, type BindingOf
+  appBindingError, decode, encode, equalBinding, equivalentSteps, keySlotForPosition, knobParts, knobSlot, labelFor, rotaryOnlyError, virtualCode, type BindingOf
 } from '../src/device/protocol.ts';
 
 describe('registros do dispositivo', () => {
@@ -67,5 +67,23 @@ describe('teclas virtuais', () => {
     expect(appBindingError({ kind: 'app', multi: true, steps: [] })).toMatch(/etapa/);
     expect(appBindingError({ kind: 'app', multi: false, steps: [{ type: 'hotkey', mods: 1, code: null }] })).toMatch(/tecla principal/);
     expect(labelFor(appBinding)).toBe('Site · example.com');
+  });
+  test('ações incrementais só cabem na rotação dos knobs', () => {
+    const brightness: BindingOf<'app'> = { kind: 'app', multi: false, steps: [{ type: 'brightness', change: 10 }] };
+    const scroll: BindingOf<'app'> = { kind: 'app', multi: false, steps: [{ type: 'mouse', action: 'scrollDown', amount: 1 }] };
+    expect(rotaryOnlyError(1, brightness)).toMatch(/rotação/);
+    expect(rotaryOnlyError(17, brightness)).toMatch(/rotação/);
+    expect(rotaryOnlyError(16, brightness)).toBeNull();
+    expect(rotaryOnlyError(18, scroll)).toBeNull();
+  });
+});
+
+describe('ações do aparelho executadas pelo app', () => {
+  test('atalho e mídia viram etapas equivalentes; o resto não tem equivalente', () => {
+    expect(equivalentSteps({ kind: 'key', mods: 1, code: 0x06 })).toEqual([{ type: 'hotkey', mods: 1, code: 0x06 }]);
+    expect(equivalentSteps({ kind: 'media', media: 0xcd })).toEqual([{ type: 'media', key: 'playPause' }]);
+    expect(equivalentSteps({ kind: 'key', mods: 0, code: null })).toBeNull();
+    expect(equivalentSteps({ kind: 'raw', label: 'Macro' })).toBeNull();
+    expect(equivalentSteps({ kind: 'empty' })).toBeNull();
   });
 });

@@ -18,8 +18,6 @@ body[data-view="editor"] .connect-screen { display: none; }
 /* Áreas nomeadas: a faixa de aviso escondida (display: none) não pode empurrar as outras linhas. */
 .app { position: fixed; inset: 0; display: grid; grid-template-rows: var(--titlebar) auto minmax(0, 1fr) var(--statusbar); grid-template-areas: "titlebar" "banner" "workspace" "statusbar"; }
 .titlebar { grid-area: titlebar; display: flex; align-items: center; gap: 12px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--border-subtle); background: var(--bg-panel); }
-.brand { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
-.brand-mark { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: #fff; }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #6c6f77; flex: none; }
 .status-dot.on { background: var(--success); box-shadow: 0 0 0 3px #45b58b26; }
 .titlebar-group { display: flex; align-items: center; gap: 8px; margin-left: 6px; }
@@ -36,7 +34,7 @@ body[data-view="editor"] .connect-screen { display: none; }
 .banner > .icon { color: var(--pending); }
 .banner .btn { margin-left: auto; }
 
-.workspace { grid-area: workspace; min-height: 0; overflow: hidden; container: workspace / inline-size; display: grid; grid-template-columns: minmax(0, 1fr) var(--library); grid-template-rows: minmax(0, 1fr) clamp(200px, 30%, 280px); }
+.workspace { grid-area: workspace; min-height: 0; overflow: hidden; container: workspace / inline-size; display: grid; grid-template-columns: minmax(0, 1fr) var(--library); grid-template-rows: minmax(0, 1fr) clamp(220px, 38%, 380px); }
 .canvas { grid-column: 1; grid-row: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; padding: 8px 20px 10px; background: radial-gradient(ellipse at 50% 45%, #1f2023, var(--bg-app) 72%); }
 .canvas-tools { align-self: stretch; display: flex; align-items: center; justify-content: space-between; height: 24px; }
 .canvas-caption { color: var(--text-faint); font-size: 12px; }

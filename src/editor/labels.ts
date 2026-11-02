@@ -6,6 +6,7 @@ import { errorText } from '../lib/text.ts';
 import { renderBoard } from './board.ts';
 import { toast } from './feedback.ts';
 import { state, tauri } from './state.ts';
+import { syncMobileMirror } from './mobile-sync.ts';
 
 const STORAGE_KEY = 'labels';
 
@@ -29,6 +30,7 @@ export async function saveLabels(labels: Label[]) {
     toast(`Não foi possível salvar a legenda: ${errorText(error)}`, 'error');
   }
   renderBoard();
+  void syncMobileMirror();
 }
 
 export function setLabel(slot: number, patch: Partial<Pick<Label, 'text' | 'icon' | 'color'>>, layer = state.layer) {

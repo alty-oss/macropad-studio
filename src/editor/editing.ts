@@ -1,6 +1,6 @@
 // Edição: rascunhos por controle, seleção, área de transferência, desfazer/refazer e operações
 // com camadas inteiras. Cada mudança redesenha as partes da tela que dependem dela.
-import { equalBinding, labelFor, type Binding } from '../device/protocol.ts';
+import { equalBinding, labelFor, rotaryOnlyError, type Binding } from '../device/protocol.ts';
 import { plural } from '../lib/text.ts';
 import { renderBoard } from './board.ts';
 import { renderChrome, renderLayers } from './chrome.ts';
@@ -68,6 +68,8 @@ export function stageDraft(layerNumber: number, slot: number, next: Binding) {
   else layer.drafts.set(slot, next);
 }
 export function setDraft(slot: number, next: Binding, { keepBody = false } = {}) {
+  const restriction = rotaryOnlyError(slot, next);
+  if (restriction) { toast(restriction, 'error'); return; }
   remember(keepBody ? `${state.layer}:${slot}` : '');
   stageDraft(state.layer, slot, next);
   renderBoard(); renderLayers(); renderChrome();

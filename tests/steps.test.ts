@@ -15,21 +15,24 @@ describe('etapas do app', () => {
   });
 
   test('etapas sem o dado principal não podem ser gravadas', () => {
-    const incomplete: StepType[] = ['open', 'website', 'text', 'hotkey', 'command', 'http', 'sound', 'counter', 'homeassistant', 'midi'];
+    const incomplete: StepType[] = ['open', 'website', 'text', 'hotkey', 'command', 'http', 'sound', 'counter'];
     for (const type of incomplete) expect(stepError(newStep(type))).not.toBeNull();
     for (const type of ['delay', 'media', 'window', 'system', 'mouse', 'brightness', 'player', 'voicemeeter'] as StepType[]) expect(stepError(newStep(type))).toBeNull();
     expect(stepError({ type: 'audio', target: 'app', app: '', action: 'up', amount: 5 })).toMatch(/programa/);
     expect(stepError({ type: 'obs', action: 'scene', scene: '', source: '', amount: 0 })).toMatch(/cena/);
     expect(stepError({ type: 'obs', action: 'volume', scene: '', source: 'Mic', amount: 2 })).toBeNull();
+    expect(stepError({ type: 'obs', action: 'screenshot', scene: '', source: 'Mic', amount: 0 })).toMatch(/pasta/);
     expect(stepError({ type: 'http', method: 'GET', url: 'ftp://x', headers: '', body: '' })).toMatch(/http/);
   });
 
   test('a leitura recusa valores fora das opções e limita números', () => {
     expect(parseStep({ type: 'media', key: 'ejetar' })).toBeNull();
     expect(parseStep({ type: 'obs', action: 'explodir' })).toBeNull();
-    expect(parseStep({ type: 'midi', port: 'loopMIDI', mode: 'add', channel: 99, control: 300, value: 1.6 }))
-      .toEqual({ type: 'midi', port: 'loopMIDI', mode: 'add', channel: 16, control: 127, value: 2 });
+    expect(parseStep({ type: 'brightness', change: 340.6 })).toEqual({ type: 'brightness', change: 100 });
     expect(parseStep({ type: 'nada' })).toBeNull();
+    // Recursos que saíram do app: arquivos antigos são importados sem essas etapas.
+    expect(parseStep({ type: 'midi', port: 'loopMIDI', mode: 'add', channel: 1, control: 7, value: 2 })).toBeNull();
+    expect(parseStep({ type: 'homeassistant', service: 'toggle', entity: 'light.sala' })).toBeNull();
   });
 });
 

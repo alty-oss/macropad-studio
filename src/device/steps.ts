@@ -15,11 +15,9 @@ export const httpMethods = [['GET', 'GET'], ['POST', 'POST'], ['PUT', 'PUT'], ['
 export const obsActions = [
   ['scene', 'Trocar de cena'], ['record', 'Gravação (alternar)'], ['recordStart', 'Iniciar gravação'], ['recordStop', 'Parar gravação'], ['recordPause', 'Pausar / retomar gravação'],
   ['stream', 'Transmissão (alternar)'], ['streamStart', 'Iniciar transmissão'], ['streamStop', 'Parar transmissão'], ['virtualcam', 'Câmera virtual (alternar)'],
-  ['replay', 'Salvar replay buffer'], ['mute', 'Silenciar fonte de áudio (alternar)'], ['volume', 'Volume de uma fonte'], ['visibility', 'Mostrar / esconder fonte'],
+  ['replay', 'Salvar replay buffer'], ['mute', 'Silenciar fonte de áudio (alternar)'], ['volume', 'Volume de uma fonte'], ['visibility', 'Mostrar / esconder fonte'], ['screenshot', 'Screenshot da fonte'],
   ['transition', 'Transição (Studio Mode)'], ['chapter', 'Marcador na gravação']
 ] as const;
-export const homeAssistantServices = [['toggle', 'Alternar'], ['turn_on', 'Ligar / ativar'], ['turn_off', 'Desligar']] as const;
-export const midiModes = [['set', 'Enviar o valor'], ['add', 'Somar ao último valor (knob)']] as const;
 export const voicemeeterModes = [['set', 'Definir o valor'], ['add', 'Somar ao valor atual'], ['toggle', 'Alternar 0 / 1']] as const;
 export const playerActions = [['playPause', 'Tocar / pausar'], ['next', 'Próxima'], ['prev', 'Anterior'], ['stop', 'Parar']] as const;
 
@@ -43,9 +41,7 @@ export type Step =
   | { type: 'sound'; path: string }
   | { type: 'counter'; path: string; change: number }
   | { type: 'brightness'; change: number }
-  | { type: 'obs'; action: ObsAction; scene: string; source: string; amount: number }
-  | { type: 'homeassistant'; service: Value<typeof homeAssistantServices>; entity: string }
-  | { type: 'midi'; port: string; channel: number; control: number; mode: Value<typeof midiModes>; value: number }
+  | { type: 'obs'; action: ObsAction; scene: string; source: string; amount: number; path?: string }
   | { type: 'voicemeeter'; parameter: string; mode: Value<typeof voicemeeterModes>; value: number }
   | { type: 'player'; app: string; action: Value<typeof playerActions> };
 export type StepType = Step['type'];
@@ -54,7 +50,7 @@ export type StepOf<T extends StepType> = Extract<Step, { type: T }>;
 export const stepNames: Record<StepType, string> = {
   open: 'Abrir', website: 'Site', text: 'Digitar texto', hotkey: 'Atalho', delay: 'Aguardar', media: 'Mídia', command: 'Comando',
   http: 'Requisição HTTP', audio: 'Áudio', window: 'Janela', system: 'Sistema', mouse: 'Mouse', sound: 'Tocar som', counter: 'Contador',
-  brightness: 'Brilho', obs: 'OBS', homeassistant: 'Home Assistant', midi: 'MIDI', voicemeeter: 'Voicemeeter', player: 'Player'
+  brightness: 'Brilho', obs: 'OBS', voicemeeter: 'Voicemeeter', player: 'Player'
 };
 
 export function newStep(type: StepType): Step {
@@ -74,9 +70,7 @@ export function newStep(type: StepType): Step {
     case 'sound': return { type, path: '' };
     case 'counter': return { type, path: '', change: 1 };
     case 'brightness': return { type, change: 10 };
-    case 'obs': return { type, action: 'record', scene: '', source: '', amount: 2 };
-    case 'homeassistant': return { type, service: 'toggle', entity: '' };
-    case 'midi': return { type, port: '', channel: 1, control: 7, mode: 'add', value: 4 };
+    case 'obs': return { type, action: 'record', scene: '', source: '', amount: 2, path: '' };
     case 'voicemeeter': return { type, parameter: 'Strip[0].Gain', mode: 'add', value: 2 };
     case 'player': return { type, app: '', action: 'playPause' };
   }
@@ -87,7 +81,7 @@ const fileName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? 
 const host = (url: string) => url.replace(/^https?:\/\//, '').split(/[/?#]/)[0];
 const signed = (value: number) => `${value > 0 ? '+' : ''}${value}`;
 // Etapas de OBS que agem sobre uma fonte, e as que pedem uma cena.
-export const obsNeedsSource = new Set<ObsAction>(['mute', 'volume', 'visibility']);
+export const obsNeedsSource = new Set<ObsAction>(['mute', 'volume', 'visibility', 'screenshot']);
 export const obsNeedsScene = new Set<ObsAction>(['scene', 'visibility']);
 
 export function stepSummary(step: Step): string {
@@ -114,11 +108,10 @@ export function stepSummary(step: Step): string {
     case 'obs': {
       if (step.action === 'scene') return step.scene || 'Escolha a cena';
       if (step.action === 'volume') return `${step.source || 'fonte'} · ${signed(step.amount)} dB`;
+      if (step.action === 'screenshot') return `${step.source || 'fonte'} · PNG`;
       if (obsNeedsSource.has(step.action)) return `${label(obsActions, step.action).split(' (')[0]} · ${step.source || 'fonte'}`;
       return label(obsActions, step.action);
     }
-    case 'homeassistant': return step.entity ? `${label(homeAssistantServices, step.service)} · ${step.entity}` : 'Escolha a entidade';
-    case 'midi': return step.port ? `CC ${step.control} · ${step.mode === 'add' ? signed(step.value) : step.value}` : 'Escolha a porta';
     case 'voicemeeter': return `${step.parameter} · ${step.mode === 'toggle' ? 'alternar' : step.mode === 'add' ? signed(step.value) : step.value}`;
     case 'player': return `${label(playerActions, step.action)}${step.app ? ` · ${step.app}` : ''}`;
   }
@@ -138,9 +131,8 @@ export function stepError(step: Step): string | null {
     case 'counter': return step.path.trim() ? null : 'Escolha o arquivo do contador.';
     case 'obs':
       if (step.action === 'scene' && !step.scene.trim()) return 'Escolha a cena do OBS.';
-      return obsNeedsSource.has(step.action) && !step.source.trim() ? 'Escolha a fonte do OBS.' : null;
-    case 'homeassistant': return step.entity.trim() ? null : 'Escolha a entidade do Home Assistant.';
-    case 'midi': return step.port ? null : 'Escolha a porta MIDI.';
+      if (obsNeedsSource.has(step.action) && !step.source.trim()) return 'Escolha a fonte do OBS.';
+      return step.action === 'screenshot' && !(step.path ?? '').trim() ? 'Escolha a pasta dos screenshots.' : null;
     case 'voicemeeter': return step.parameter.trim() ? null : 'Informe o parâmetro do Voicemeeter, como Strip[0].Gain.';
     default: return null;
   }
@@ -180,17 +172,7 @@ export function parseStep(value: unknown): Step | null {
     case 'brightness': return { type: 'brightness', change: Math.round(number(value.change, -100, 100, 10)) };
     case 'obs': {
       const action = option(obsActions, value.action);
-      return action ? { type: 'obs', action, scene: text(value.scene), source: text(value.source), amount: number(value.amount, -100, 100, 2) } : null;
-    }
-    case 'homeassistant': {
-      const service = option(homeAssistantServices, value.service);
-      return service && typeof value.entity === 'string' ? { type: 'homeassistant', service, entity: value.entity } : null;
-    }
-    case 'midi': {
-      const mode = option(midiModes, value.mode);
-      return mode && typeof value.port === 'string' ? {
-        type: 'midi', port: value.port, mode, channel: Math.round(number(value.channel, 1, 16, 1)), control: Math.round(number(value.control, 0, 127, 7)), value: Math.round(number(value.value, -127, 127, 4))
-      } : null;
+      return action ? { type: 'obs', action, scene: text(value.scene), source: text(value.source), amount: number(value.amount, -100, 100, 2), ...(typeof value.path === 'string' ? { path: value.path } : {}) } : null;
     }
     case 'voicemeeter': {
       const mode = option(voicemeeterModes, value.mode);
