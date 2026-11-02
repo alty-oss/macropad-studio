@@ -40,6 +40,7 @@ input, textarea { user-select: text; }
 [hidden] { display: none !important; }
 h1, h2, h3, p { margin: 0; }
 code, kbd { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; }
+svg { pointer-events: none; -webkit-user-drag: none; }
 .icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -50,3 +51,37 @@ code, kbd { font-family: "Cascadia Mono", Consolas, monospace; font-size: 11px; 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Tema claro: escolhido nas Configurações ou seguindo o Windows. O aparelho na pré-visualização
+   continua com as cores do produto. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-app: #eef0f3;
+  --bg-panel: #ffffff;
+  --bg-elevated: #f3f4f6;
+  --bg-input: #ffffff;
+  --bg-hover: #e6e8ec;
+  --border: #d3d6dc;
+  --border-subtle: #e3e5e9;
+  --text: #1c1d20;
+  --text-secondary: #555963;
+  --text-faint: #858a94;
+  --accent: #1f6fe5;
+  --accent-hover: #3b82f0;
+  --accent-soft: #1f6fe51f;
+  --pending: #b7791f;
+  --success: #24895f;
+  --danger: #c24040;
+}
+/* Superfícies com cor própria, que no tema escuro não usam tokens. */
+:root[data-theme="light"] .connect-screen { background: radial-gradient(ellipse at 50% 35%, #ffffff, var(--bg-app) 70%); }
+:root[data-theme="light"] .canvas { background: radial-gradient(ellipse at 50% 45%, #f7f8fa, #dfe2e7 72%); }
+:root[data-theme="light"] .banner { background: #fbf3e4; }
+:root[data-theme="light"] .spinner { border-color: #d3d6dc; border-top-color: var(--accent); }
+:root[data-theme="light"] .library-context.active, :root[data-theme="light"] .chip-app, :root[data-theme="light"] .welcome-icon { color: var(--accent); }
+:root[data-theme="light"] .action-item.active .action-icon, :root[data-theme="light"] .inspector-icon.via-app { background: #dbe8fc; color: var(--accent); }
+:root[data-theme="light"] .inspector-icon { background: linear-gradient(180deg, #ffffff, #eef0f3); }
+:root[data-theme="light"] .input:hover, :root[data-theme="light"] .shortcut-field:hover { border-color: #b9bdc5; }
+:root[data-theme="light"] kbd { border-color: #c4c8cf; }
+:root[data-theme="light"] .toast-error { border-color: #e7b4b4; }
+:root[data-theme="light"] .modal::backdrop { background: #0005; }

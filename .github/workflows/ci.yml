@@ -1,0 +1,36 @@
+# Verifica cada pull request: tipos, testes da interface e do Rust, clippy e o build do app. O push
+# na main é verificado pelo workflow de release, que também publica a versão.
+name: CI
+
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Testes do Rust
+        working-directory: src-tauri
+        run: cargo test
+      - name: Instalador
+        run: bun run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: instalador
+          path: src-tauri/target/release/bundle/nsis/*.exe

@@ -45,3 +45,5 @@ body[data-view="editor"] .connect-screen { display: none; }
 .statusbar { grid-area: statusbar; display: flex; align-items: center; gap: 16px; padding: 0 14px; border-top: 1px solid var(--border-subtle); background: var(--bg-panel); color: var(--text-faint); font-size: 11px; }
 .status-item { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .status-message { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Camada ativa no macropad, deduzida da última tecla virtual recebida. */
+.segment-live { position: absolute; bottom: 3px; left: 50%; width: 12px; height: 2px; translate: -50% 0; border-radius: 1px; background: var(--success); }

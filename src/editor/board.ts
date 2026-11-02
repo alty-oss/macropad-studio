@@ -7,7 +7,7 @@ import { assign, select, swap } from './editing.ts';
 import { keycapLegend } from './legend.ts';
 import { actionById } from './library.ts';
 import { openContextMenu } from './menu.ts';
-import { bindingAt, controlLabel, layerData, state } from './state.ts';
+import { bindingAt, controlLabel, labelAt, layerData, state } from './state.ts';
 
 export const DRAG_ACTION = 'application/x-macropad-action';
 export const DRAG_SLOT = 'application/x-macropad-slot';
@@ -36,6 +36,7 @@ export function makeDropTarget(element: HTMLElement, slot: number) {
 
 function controlButton(slot: number, className: string, ...content: Child[]) {
   const binding = bindingAt(slot);
+  const color = binding.kind === 'empty' ? '' : labelAt(slot)?.color;
   const button = h('button', {
     type: 'button', class: className, draggable: 'true', 'data-slot': slot, 'aria-pressed': String(state.selected === slot),
     'aria-label': `${controlLabel(slot)}: ${labelFor(binding)}`
@@ -43,6 +44,7 @@ function controlButton(slot: number, className: string, ...content: Child[]) {
   button.classList.toggle('selected', state.selected === slot);
   button.classList.toggle('dirty', layerData().drafts.has(slot));
   button.classList.toggle('assigned', binding.kind !== 'empty');
+  if (color) button.style.setProperty('--keycap-accent', color);
   button.addEventListener('click', () => select(slot));
   button.addEventListener('contextmenu', event => { event.preventDefault(); select(slot); openContextMenu(event.clientX, event.clientY); });
   button.addEventListener('dragstart', event => {
@@ -78,7 +80,9 @@ export function renderBoard() {
     // O knob abre na função usada por último; selecionado, mostra os botões das três funções.
     const slots = [0, 1, 2].map(action => knobSlot(i, action));
     const isSelected = state.selected !== null && slots.includes(state.selected);
-    const button = controlButton(knobSlot(i, state.knobPart[i]), 'knob-press', h('span', { class: 'knob-indicator' }));
+    const dial = h('span', { class: 'knob-dial' }, h('span', { class: 'knob-indicator' }));
+    dial.style.rotate = `${state.knobAngle[i]}deg`;
+    const button = controlButton(knobSlot(i, state.knobPart[i]), 'knob-press', dial);
     button.dataset.knob = String(i);
     button.setAttribute('aria-label', `Knob ${i + 1}`);
     button.classList.toggle('selected', isSelected);
@@ -88,7 +92,7 @@ export function renderBoard() {
   for (let i = 0; i < state.layout.keys; i++) {
     const slot = keySlotForPosition(i, state.layout.keys);
     if (!slot) continue;
-    keys.push(controlButton(slot, 'keycap', keycapLegend(bindingAt(slot))));
+    keys.push(controlButton(slot, 'keycap', keycapLegend(bindingAt(slot), labelAt(slot))));
   }
   $('#knobs').replaceChildren(...knobs);
   $('#keys').replaceChildren(...keys);
@@ -96,11 +100,56 @@ export function renderBoard() {
   if (focused) document.querySelector<HTMLElement>(focused)?.focus();
 }
 
-// Destaca o controle acionado por uma tecla virtual.
+// Graus que o indicador do knob anda a cada clique do encoder.
+const DETENT = 24;
+
+// Acompanha o controle acionado por uma tecla virtual: a tecla e o knob pressionado afundam, e o
+// indicador do knob gira para o mesmo lado que o knob do aparelho.
 export function flash(slot: number) {
+  if (slot >= 16) {
+    const knob = Math.floor((slot - 16) / 3), part = (slot - 16) % 3;
+    if (part !== 1) {
+      state.knobAngle[knob] += part === 0 ? -DETENT : DETENT;
+      for (const dial of document.querySelectorAll<HTMLElement>(`.knob-press[data-knob="${knob}"] .knob-dial`)) dial.style.rotate = `${state.knobAngle[knob]}deg`;
+      return;
+    }
+  }
   const target = slot >= 16 ? `.knob-press[data-knob="${Math.floor((slot - 16) / 3)}"]` : `.keycap[data-slot="${slot}"]`;
   for (const element of document.querySelectorAll(target)) {
     element.classList.add('pressed');
     setTimeout(() => element.classList.remove('pressed'), 220);
   }
+}
+
+// Navegação pelo teclado na pré-visualização: as setas levam ao controle mais próximo naquela
+// direção na tela (o aparelho aparece deitado, então a ordem do DOM não ajuda); Shift+F10 ou a
+// tecla de menu abrem o menu do controle.
+export function bindBoardKeyboard() {
+  $('.device-body').addEventListener('keydown', event => {
+    const current = (event.target as HTMLElement).closest<HTMLElement>('.keycap, .knob-press');
+    if (!current) return;
+    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      event.preventDefault();
+      const box = current.getBoundingClientRect();
+      current.click();
+      openContextMenu(box.left + box.width / 2, box.top + box.height / 2);
+      return;
+    }
+    const direction = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+    if (!direction) return;
+    event.preventDefault();
+    const center = (element: Element) => { const box = element.getBoundingClientRect(); return [box.left + box.width / 2, box.top + box.height / 2]; };
+    const [x, y] = center(current);
+    let best: HTMLElement | null = null, bestScore = Infinity;
+    for (const candidate of document.querySelectorAll<HTMLElement>('.device-body .keycap, .device-body .knob-press')) {
+      if (candidate === current) continue;
+      const [cx, cy] = center(candidate);
+      const along = (cx - x) * direction[0] + (cy - y) * direction[1];
+      if (along <= 4) continue;
+      const across = Math.abs((cx - x) * direction[1] + (cy - y) * direction[0]);
+      const score = along + across * 2;
+      if (score < bestScore) { bestScore = score; best = candidate; }
+    }
+    best?.focus();
+  });
 }

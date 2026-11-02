@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build",
-    "build:web": "bun build ./src/index.html --outdir ./dist --minify",
+    "build:web": "bun build ./src/index.html ./src/osd.html --outdir ./dist --minify",
     "web": "bun scripts/dev-server.ts",
     "icons": "tauri icon src-tauri/icons/app-icon.svg",
     "typecheck": "tsc -p .",

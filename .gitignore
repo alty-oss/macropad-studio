@@ -25,3 +25,6 @@ Desktop.ini
 
 # Interface empacotada por `bun run build:web`
 dist/
+
+# Arquivos do release gerados por scripts/release-assets.ts
+release/

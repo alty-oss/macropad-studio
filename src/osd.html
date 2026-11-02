@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Macropad Studio OSD</title>
+  <style>
+    /* Janela transparente, sempre no topo e sem receber cliques (src-tauri/src/main.rs, set_osd). */
+    html, body { margin: 0; height: 100%; overflow: hidden; background: transparent; }
+    body { display: flex; align-items: center; justify-content: center; font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; user-select: none; }
+    .osd { display: flex; align-items: center; gap: 12px; max-width: 340px; padding: 12px 18px; border: 1px solid #ffffff1f; border-radius: 14px; background: #18191bf0; color: #f1f2f4; box-shadow: 0 12px 36px #0009; opacity: 0; transform: translateY(8px) scale(.98); transition: opacity 140ms ease-out, transform 140ms ease-out; }
+    .osd.visible { opacity: 1; transform: none; }
+    .osd .mark { flex: none; width: 10px; height: 10px; border-radius: 50%; background: #3286ff; box-shadow: 0 0 0 4px #3286ff33; }
+    .osd.error .mark { background: #e07979; box-shadow: 0 0 0 4px #e0797933; }
+    .osd .text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .osd strong, .osd span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .osd strong { font-size: 14px; font-weight: 600; }
+    .osd span { color: #a8abb2; font-size: 12px; }
+    .osd span:empty { display: none; }
+    @media (prefers-reduced-motion: reduce) { .osd { transition: none; } }
+  </style>
+  <script type="module" src="./osd.ts"></script>
+</head>
+<body>
+  <div id="osd" class="osd" role="status" aria-live="polite"><i class="mark"></i><div class="text"><strong id="osd-title"></strong><span id="osd-detail"></span></div></div>
+</body>
+</html>

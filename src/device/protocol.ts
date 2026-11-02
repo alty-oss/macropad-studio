@@ -1,17 +1,17 @@
 // Protocolo do macropad CH57x (USB 1189:8840): slots, teclas virtuais e codificação dos registros.
 // Não acessa o DOM, para que os testes possam importá-lo diretamente.
 import { comboLabel, isKnownKey, keyNames, mediaNames } from './keys.ts';
+import { stepError, stepNames, stepSummary, type Step } from './steps.ts';
+
+export { newStep, stepNames, stepSummary, type Step, type StepOf, type StepType } from './steps.ts';
 
 export const DEVICE = { vendorId: 0x1189, productId: 0x8840, usagePage: 0xff00, usage: 1, reportId: 3, reportLength: 64 };
 
-// Etapas executadas pelo app; o formato é o mesmo do enum Step em src-tauri/src/config.rs.
-export type Step =
-  | { type: 'open'; path: string; args: string }
-  | { type: 'website'; url: string }
-  | { type: 'text'; text: string }
-  | { type: 'hotkey'; mods: number; code: number | null }
-  | { type: 'delay'; ms: number };
-export type StepType = Step['type'];
+// Modo de uma ação do app: "toggle" alterna entre "steps" e "alt" a cada pressão; "hold" executa
+// "steps" num toque e "alt" ao segurar a tecla.
+export type AppMode = 'normal' | 'toggle' | 'hold';
+// Etapas usadas quando o programa em foco é "app" (nome do executável, como photoshop.exe).
+export interface Profile { app: string; steps: Step[] }
 
 // O que um controle faz. "app" é gravado no macropad como tecla virtual; "raw" é uma ação
 // existente que o editor não representa e apenas preserva.
@@ -19,21 +19,16 @@ export type Binding =
   | { kind: 'empty' }
   | { kind: 'key'; mods: number; code: number | null }
   | { kind: 'media'; media: number }
-  | { kind: 'app'; multi: boolean; steps: Step[] }
+  | { kind: 'app'; multi: boolean; steps: Step[]; mode?: AppMode; alt?: Step[]; profiles?: Profile[] }
   | { kind: 'raw'; label: string };
 export type BindingOf<K extends Binding['kind']> = Extract<Binding, { kind: K }>;
 
 // Macro salva pelo app (struct Macro em src-tauri/src/config.rs).
-export interface Macro { layer: number; slot: number; mods: number; code: number; multi: boolean; steps: Step[] }
+export interface Macro { layer: number; slot: number; mods: number; code: number; multi: boolean; steps: Step[]; mode: AppMode; alt: Step[]; profiles: Profile[] }
 
-export function newStep(type: StepType): Step {
-  switch (type) {
-    case 'open': return { type, path: '', args: '' };
-    case 'website': return { type, url: '' };
-    case 'text': return { type, text: '' };
-    case 'hotkey': return { type, mods: 0, code: null };
-    case 'delay': return { type, ms: 300 };
-  }
+// Ação do app com os campos opcionais preenchidos, para comparar e salvar.
+export function appParts(binding: BindingOf<'app'>) {
+  return { multi: binding.multi, steps: binding.steps, mode: binding.mode ?? 'normal', alt: binding.alt ?? [], profiles: binding.profiles ?? [] };
 }
 
 export const knobSlot = (index: number, action: number) => 16 + index * 3 + action;
@@ -62,16 +57,6 @@ export function virtualCode(layer: number, slot: number): { mods: number; code: 
   return { mods: VIRTUAL_MODS[Math.floor(index / 12)], code: 0x68 + index % 12 };
 }
 
-export const stepNames: Record<StepType, string> = { open: 'Abrir', website: 'Site', text: 'Digitar texto', hotkey: 'Atalho', delay: 'Aguardar' };
-export function stepSummary(step: Step): string {
-  switch (step.type) {
-    case 'open': return step.path ? step.path.split(/[\\/]/).filter(Boolean).pop() ?? step.path : 'Escolha um arquivo';
-    case 'website': return step.url ? step.url.replace(/^https?:\/\//, '').replace(/\/$/, '') : 'Informe o endereço';
-    case 'text': return step.text ? `“${step.text.length > 24 ? `${step.text.slice(0, 24)}…` : step.text}”` : 'Informe o texto';
-    case 'hotkey': return comboLabel(step.mods, step.code).join(' + ') || 'Escolha a combinação';
-    case 'delay': return `${step.ms} ms`;
-  }
-}
 export function labelFor(binding: Binding): string {
   switch (binding.kind) {
     case 'key': return comboLabel(binding.mods, binding.code).join(' + ') || 'Escolha uma tecla';
@@ -90,19 +75,28 @@ export function equalBinding(a: Binding | undefined, b: Binding | undefined): bo
   switch (a.kind) {
     case 'key': { const other = b as typeof a; return a.mods === other.mods && a.code === other.code; }
     case 'media': return a.media === (b as typeof a).media;
-    case 'app': { const other = b as typeof a; return a.multi === other.multi && JSON.stringify(a.steps) === JSON.stringify(other.steps); }
+    case 'app': return JSON.stringify(appParts(a)) === JSON.stringify(appParts(b as typeof a));
     case 'raw': return false;
     case 'empty': return true;
   }
 }
 // Erro que impede gravar uma ação do app, ou null quando ela está completa.
 export function appBindingError(binding: BindingOf<'app'>): string | null {
-  if (!binding.steps.length) return 'Adicione pelo menos uma etapa.';
-  for (const step of binding.steps) {
-    if (step.type === 'open' && !step.path.trim()) return 'Escolha o arquivo, pasta ou programa a abrir.';
-    if (step.type === 'website' && !step.url.trim()) return 'Informe o endereço do site.';
-    if (step.type === 'text' && !step.text) return 'Informe o texto a digitar.';
-    if (step.type === 'hotkey' && !isKnownKey(step.code)) return 'Escolha a tecla principal do atalho.';
+  const { steps, mode, alt, profiles } = appParts(binding);
+  const firstError = (list: Step[]) => list.map(stepError).find(Boolean) ?? null;
+  if (!steps.length) return 'Adicione pelo menos uma etapa.';
+  const main = firstError(steps);
+  if (main) return main;
+  if (mode !== 'normal') {
+    if (!alt.length) return mode === 'toggle' ? 'Adicione as etapas da segunda pressão.' : 'Adicione as etapas de segurar a tecla.';
+    const second = firstError(alt);
+    if (second) return second;
+  }
+  for (const profile of profiles) {
+    if (!profile.app.trim()) return 'Informe o programa de cada perfil, como photoshop.exe.';
+    if (!profile.steps.length) return `Adicione etapas ao perfil de ${profile.app}.`;
+    const error = firstError(profile.steps);
+    if (error) return `Perfil de ${profile.app}: ${error}`;
   }
   return null;
 }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="dark light">
   <title>Macropad Studio</title>
   <link rel="stylesheet" href="./styles/main.css">
   <script type="module" src="./main.ts"></script>
@@ -30,9 +30,11 @@
       </div>
       <div class="titlebar-spacer"></div>
       <span id="sync-state" class="sync-state"></span>
-      <button id="read" class="btn btn-icon" type="button" aria-label="Ler a camada do dispositivo" data-icon="refresh"></button>
+      <button id="undo" class="btn btn-icon" type="button" aria-label="Desfazer (Ctrl+Z)" title="Desfazer (Ctrl+Z)" data-icon="undo"></button>
+      <button id="redo" class="btn btn-icon" type="button" aria-label="Refazer (Ctrl+Y)" title="Refazer (Ctrl+Y)" data-icon="redo"></button>
+      <button id="read" class="btn btn-icon" type="button" aria-label="Ler a camada do dispositivo" title="Ler a camada do dispositivo" data-icon="refresh"></button>
       <button id="save" class="btn btn-primary" type="button"><span data-icon="download"></span><span id="save-label">Gravar no dispositivo</span></button>
-      <button id="open-backup" class="btn btn-icon" type="button" aria-label="Importar ou exportar configuração" aria-haspopup="menu" data-icon="archive"></button>
+      <button id="open-backup" class="btn btn-icon" type="button" aria-label="Mais: kits, camadas, importar e exportar" title="Kits, camadas, importar e exportar" aria-haspopup="menu" data-icon="archive"></button>
       <button id="open-settings" class="btn btn-icon" type="button" aria-label="Configurações" data-icon="settings"></button>
     </header>
     <div id="banner" class="banner" role="status" hidden><span data-icon="warning"></span><span id="banner-text"></span></div>
@@ -114,20 +116,57 @@
       <button id="close-settings" class="btn btn-icon" type="button" aria-label="Fechar" data-icon="x"></button>
     </header>
     <div class="modal-body settings">
+      <section>
+        <h3>Aparência</h3>
+        <div class="settings-field"><label for="theme">Tema</label><select id="theme" class="input"><option value="system">Igual ao Windows</option><option value="dark">Escuro</option><option value="light">Claro</option></select></div>
+      </section>
       <section id="settings-app">
         <h3>Aplicativo</h3>
-        <label class="check-row"><input id="autostart" type="checkbox"><span><strong>Iniciar com o Windows</strong><small>Abre minimizado na bandeja para que as ações do app funcionem desde o login.</small></span></label>
-        <p class="settings-note">Fechar a janela mantém o Macropad Studio na bandeja. Para encerrar, use <strong>Sair</strong> no ícone da bandeja.</p>
+        <div class="settings-checks">
+          <label class="check-row"><input id="autostart" type="checkbox"><span><strong>Iniciar com o Windows</strong><small>Abre minimizado na bandeja para que as ações do app funcionem desde o login.</small></span></label>
+          <label class="check-row"><input id="osd" type="checkbox"><span><strong>Mostrar aviso na tela (OSD)</strong><small>Ao usar uma ação do app, um aviso discreto mostra o que aconteceu, como o volume ou a cena do OBS.</small></span></label>
+          <label class="check-row"><input id="keys-paused" type="checkbox"><span><strong>Pausar teclas virtuais</strong><small>As teclas com ações do app param de funcionar, por exemplo durante um jogo. Também fica na bandeja.</small></span></label>
+        </div>
+        <p class="settings-note">Fechar a janela mantém o Macropad Studio na bandeja. Para encerrar, use <strong>Sair</strong> no ícone da bandeja. Para disparar uma tecla por script: <code>"Macropad Studio.exe" --run 1:3</code> (camada 1, slot 3) ou <code>--stop</code>.</p>
+      </section>
+      <section id="settings-obs">
+        <div class="settings-row"><h3>OBS Studio</h3><span id="obs-state" class="settings-state"></span></div>
+        <label class="check-row"><input id="obs-enabled" type="checkbox"><span><strong>Conectar ao OBS</strong><small>No OBS, abra Ferramentas › Configurações do WebSocket, ative o servidor e copie a senha.</small></span></label>
+        <div class="settings-grid">
+          <label for="obs-host">Endereço</label><input id="obs-host" class="input" spellcheck="false" placeholder="127.0.0.1">
+          <label for="obs-port">Porta</label><input id="obs-port" class="input input-short" type="number" min="1" max="65535" placeholder="4455">
+          <label for="obs-password">Senha</label><input id="obs-password" class="input" type="password" autocomplete="off" placeholder="Senha do obs-websocket">
+        </div>
+      </section>
+      <section id="settings-homeassistant">
+        <h3>Home Assistant</h3>
+        <div class="settings-grid">
+          <label for="ha-url">Endereço</label><input id="ha-url" class="input" spellcheck="false" placeholder="http://homeassistant.local:8123">
+          <label for="ha-token">Token</label><input id="ha-token" class="input" type="password" autocomplete="off" placeholder="Token de acesso de longa duração">
+        </div>
+        <p class="settings-note">Crie o token no seu perfil do Home Assistant. Senhas e tokens ficam no Gerenciador de Credenciais do Windows.</p>
+        <div class="settings-actions"><button id="save-integrations" class="btn btn-primary btn-small" type="button">Salvar integrações</button></div>
       </section>
       <section>
-        <div class="settings-row"><h3>Registro de atividade</h3><button id="clear-log" class="btn-link" type="button">Limpar</button></div>
+        <div class="settings-row"><h3>Registro de atividade</h3><span><button id="open-logs" class="btn-link" type="button">Abrir pasta de logs</button><button id="clear-log" class="btn-link" type="button">Limpar</button></span></div>
         <output id="log" class="log" aria-live="polite">Pronto.</output>
       </section>
       <section>
         <h3>Sobre</h3>
+        <div id="settings-update" class="settings-row"><span id="app-version" class="settings-state"></span><button id="check-update" class="btn btn-small" type="button">Procurar atualizações</button></div>
         <p class="settings-note">O editor envia apenas os comandos documentados de leitura e gravação de atalhos (<code>0xFA</code>/<code>0xFB</code>/<code>0xFE</code>). Não altera firmware nem modelo do teclado.</p>
       </section>
     </div>
+  </dialog>
+
+  <dialog id="welcome-modal" class="modal" aria-labelledby="welcome-title">
+    <header class="modal-head"><div><h2 id="welcome-title">Bem-vindo ao Macropad Studio</h2><p>Três coisas para saber antes de começar.</p></div></header>
+    <div class="modal-body welcome">
+      <div class="welcome-item"><span class="welcome-icon" data-icon="logo"></span><div><strong>No macropad ou via app</strong><p>Atalhos e mídia ficam gravados no aparelho e funcionam em qualquer computador. As ações marcadas com <em>App</em> (abrir programas, OBS, áudio, multi-ações…) precisam do Macropad Studio aberto, nem que seja só na bandeja.</p></div></div>
+      <div class="welcome-item"><span class="welcome-icon" data-icon="layers"></span><div><strong>Três camadas</strong><p>Cada camada tem sua própria configuração. A camada ativa é trocada no próprio macropad; o app não consegue trocá-la, mas marca no cabeçalho a camada de onde veio a última tecla do app.</p></div></div>
+      <div class="welcome-item"><span class="welcome-icon" data-icon="download"></span><div><strong>Nada muda até gravar</strong><p>Arraste ações até as teclas, ajuste no painel de propriedades e clique em <strong>Gravar no dispositivo</strong>. Ctrl+Z desfaz, e o menu <strong>Mais</strong> tem kits prontos para OBS, reuniões, VS Code e outros.</p></div></div>
+    </div>
+    <footer class="modal-foot"><span></span><div class="modal-actions"><button id="close-welcome" class="btn btn-primary" type="button">Começar</button></div></footer>
   </dialog>
 
   <dialog id="confirm-modal" class="modal modal-small" aria-labelledby="confirm-title">

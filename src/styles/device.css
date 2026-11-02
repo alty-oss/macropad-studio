@@ -87,3 +87,9 @@
 .keycap.pressed { transform: translateY(calc(.35 * var(--u))); box-shadow: inset 0 1px 0 #ffffff1c, 0 0 0 calc(.55 * var(--u)) #0b0b0c, 0 0 0 calc(.75 * var(--u)) #ffffff0f, 0 calc(.4 * var(--u)) calc(.6 * var(--u)) #000b; }
 .knob-press.pressed { transform: scale(.94); }
 .keycap.pressed::before { background: radial-gradient(130% 100% at 50% 0%, #3a5b8f, #2a4573 60%, #243d66); }
+/* O indicador do knob fica num disco do tamanho do knob, que gira junto com o knob do aparelho. */
+.knob-dial { position: absolute; inset: 0; z-index: 3; border-radius: 50%; pointer-events: none; transition: rotate 160ms ease-out; }
+/* Cor escolhida pelo usuário: tinge a legenda e acende a frente da keycap. */
+.keycap[style*="--keycap-accent"] .keycap-legend { color: var(--keycap-accent); }
+.keycap[style*="--keycap-accent"] { box-shadow: inset 0 calc(-.9 * var(--u)) 0 var(--keycap-accent), inset 0 1px 0 #ffffff1c, 0 0 0 calc(.55 * var(--u)) #0b0b0c, 0 0 0 calc(.75 * var(--u)) #ffffff0f, 0 calc(1.2 * var(--u)) calc(1.6 * var(--u)) #000b; }
+@media (prefers-reduced-motion: reduce) { .knob-dial { transition: none; } }

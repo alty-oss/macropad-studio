@@ -5,7 +5,7 @@ import { clearSelected, copySelected, pasteSelected } from './editing.ts';
 import { testSelected } from './inspector.ts';
 import { bindingAt, state, tauri } from './state.ts';
 
-type MenuEntry = { label: string; shortcut?: string; icon?: IconName; disabled?: boolean; action: () => void } | '-' | false;
+export type MenuEntry ={ label: string; shortcut?: string; icon?: IconName; disabled?: boolean; action: () => void } | '-' | false;
 
 export function closeContextMenu() { $('#context-menu').hidden = true; }
 
@@ -24,7 +24,7 @@ export function showMenu(x: number, y: number, entries: MenuEntry[]) {
 export function openContextMenu(x: number, y: number) {
   if (!state.selected) return;
   const binding = bindingAt(state.selected);
-  const testable = binding.kind === 'app' && tauri;
+  const testable = binding.kind !== 'empty' && binding.kind !== 'raw' && tauri;
   showMenu(x, y, [
     { label: 'Copiar', shortcut: 'Ctrl+C', disabled: binding.kind === 'empty' || binding.kind === 'raw', action: copySelected },
     { label: 'Colar', shortcut: 'Ctrl+V', disabled: !state.clipboard, action: pasteSelected },

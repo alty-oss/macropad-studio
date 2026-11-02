@@ -1,0 +1,60 @@
+# Release automático: cada push na main gera uma versão nova (<maior>.<menor> do Cargo.toml + o
+# número desta execução, como 0.3.12), cria a tag v<versão> e publica em Releases o instalador com
+# os artefatos do updater assinados (segredos TAURI_SIGNING_PRIVATE_KEY e
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD) e o latest.json que o app consulta para se atualizar.
+# A assinatura de código do instalador (SmartScreen) ainda depende de um certificado (ver docs/TODO.md).
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# Um release por vez, na ordem dos pushes.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # O histórico e as tags montam as notas (commits desde o release anterior).
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+      - name: Testes do Rust
+        working-directory: src-tauri
+        run: cargo test
+      - name: Versão
+        id: version
+        run: bun scripts/release.ts prepare ${{ github.run_number }}
+      - name: Instalador e artefatos do updater
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: bun x tauri build --config release/tauri.conf.json
+      - run: bun scripts/release.ts assets ${{ steps.version.outputs.version }} ${{ github.repository }}
+      - name: Publicar em Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          gh release create "v$version" release/*.exe release/latest.json \
+            --target "$GITHUB_SHA" --latest \
+            --title "Macropad Studio $version" --notes-file release/notes.md

@@ -1,17 +1,45 @@
 // Como cada ação aparece: título e ícone no painel, legenda impressa na keycap.
+import type { Label } from '../device/backup-file.ts';
 import { comboLabel, mediaNames } from '../device/keys.ts';
-import { stepNames, type Binding, type Step, type StepType } from '../device/protocol.ts';
+import { stepNames, type Binding, type Step } from '../device/protocol.ts';
 import { h } from '../lib/dom.ts';
-import { icon, type IconName } from '../lib/icons.ts';
+import { icon, isIconName, type IconName } from '../lib/icons.ts';
 import { plural } from '../lib/text.ts';
 
 export const PROGRAM_PATH = /\.(exe|bat|cmd|com|lnk)$/i;
 export const mediaIcons = new Map<number, IconName>([[0xe9, 'volumeUp'], [0xea, 'volumeDown'], [0xe2, 'mute'], [0xcd, 'playPause'], [0xb5, 'next'], [0xb6, 'prev']]);
 const mediaShort = new Map<number, string>([[0xe9, 'Vol +'], [0xea, 'Vol −'], [0xe2, 'Mudo'], [0xcd, 'Play'], [0xb5, 'Próx.'], [0xb6, 'Ant.']]);
-const stepIcons: Record<StepType, IconName> = { open: 'folder', website: 'globe', text: 'text', hotkey: 'keyboard', delay: 'clock' };
-// Em "Abrir", o ícone segue o caminho: programa, arquivo com extensão ou pasta.
-export const stepIcon = (step: Step): IconName => step.type !== 'open' ? stepIcons[step.type]
-  : PROGRAM_PATH.test(step.path.trim()) ? 'app' : /\.[a-z0-9]{1,5}$/i.test(step.path.trim()) ? 'file' : 'folder';
+// Teclas de mídia das etapas do app, com os mesmos ícones e nomes curtos das gravadas no aparelho.
+const mediaKeyIcons: Record<string, IconName> = { playPause: 'playPause', next: 'next', prev: 'prev', stop: 'stop', volumeUp: 'volumeUp', volumeDown: 'volumeDown', mute: 'mute' };
+const mediaKeyShort: Record<string, string> = { playPause: 'Play', next: 'Próx.', prev: 'Ant.', stop: 'Parar', volumeUp: 'Vol +', volumeDown: 'Vol −', mute: 'Mudo' };
+
+// O ícone segue o conteúdo: em "Abrir", programa, arquivo ou pasta; em mídia e áudio, a ação.
+export function stepIcon(step: Step): IconName {
+  switch (step.type) {
+    case 'open': return PROGRAM_PATH.test(step.path.trim()) ? 'app' : /\.[a-z0-9]{1,5}$/i.test(step.path.trim()) ? 'file' : 'folder';
+    case 'website': return 'globe';
+    case 'text': return 'text';
+    case 'hotkey': return 'keyboard';
+    case 'delay': return 'clock';
+    case 'media': return mediaKeyIcons[step.key] ?? 'playPause';
+    case 'command': return 'terminal';
+    case 'http': return 'link';
+    case 'audio':
+      if (step.action === 'up') return 'volumeUp';
+      if (step.action === 'down') return 'volumeDown';
+      return step.target === 'mic' ? 'mic' : 'mute';
+    case 'window': return 'window';
+    case 'system': return step.action === 'theme' ? 'sun' : 'power';
+    case 'mouse': return 'mouse';
+    case 'sound': return 'music';
+    case 'counter': return 'hash';
+    case 'brightness': return 'sun';
+    case 'obs': return step.action === 'mute' ? 'mic' : step.action === 'visibility' ? 'eye' : step.action === 'volume' ? 'volumeUp' : 'obs';
+    case 'homeassistant': return 'home';
+    case 'midi': case 'voicemeeter': return 'sliders';
+    case 'player': return step.action === 'next' ? 'next' : step.action === 'prev' ? 'prev' : step.action === 'stop' ? 'stop' : 'playPause';
+  }
+}
 
 // where: 'device' para ações gravadas no macropad, 'app' para as executadas por teclas virtuais.
 export function bindingMeta(binding: Binding): { title: string; icon: IconName; where: 'device' | 'app' | null } {
@@ -28,18 +56,46 @@ export function bindingMeta(binding: Binding): { title: string; icon: IconName; 
   }
 }
 
-// Nome curto para caber numa tecla: pasta ou arquivo sem extensão de executável, domínio sem "www." nem sufixo.
+const withoutExtension = (name: string) => name.replace(/\.(exe|lnk|bat|cmd|url|mp3|wav|ogg|txt)$/i, '');
+const lastPart = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() || '';
+const domain = (url: string, fallback: string) => {
+  try { return new URL(url).hostname.replace(/^www\./, '').split('.')[0] || fallback; }
+  catch { return fallback; }
+};
+const obsShort: Record<string, string> = {
+  record: 'REC', recordStart: 'REC', recordStop: 'Parar', recordPause: 'Pausa', stream: 'Live', streamStart: 'Live', streamStop: 'Fim',
+  virtualcam: 'Cam', replay: 'Replay', transition: 'Corte', chapter: 'Marca'
+};
+const windowShort: Record<string, string> = { minimize: 'Min', maximize: 'Max', close: 'Fechar', topmost: 'Topo', nextMonitor: 'Monitor' };
+const systemShort: Record<string, string> = { lock: 'Bloq.', sleep: 'Suspender', shutdown: 'Desligar', restart: 'Reiniciar', theme: 'Tema' };
+const mouseShort: Record<string, string> = { left: 'Clique', right: 'Clique D', middle: 'Meio', scrollUp: 'Rolar ↑', scrollDown: 'Rolar ↓', scrollLeft: 'Rolar ←', scrollRight: 'Rolar →' };
+
+// Nome curto para caber numa tecla.
 function shortName(step: Step): string {
-  if (step.type === 'open') {
-    const name = step.path.split(/[\\/]/).filter(Boolean).pop() || '';
-    return name.replace(/\.(exe|lnk|bat|cmd|url)$/i, '') || 'Abrir';
+  switch (step.type) {
+    case 'open': return withoutExtension(lastPart(step.path)) || 'Abrir';
+    case 'website': return domain(step.url, 'Site');
+    case 'hotkey': return comboLabel(step.mods, step.code).join('+') || 'Atalho';
+    case 'media': return mediaKeyShort[step.key] ?? 'Mídia';
+    case 'command': return 'Cmd';
+    case 'http': return domain(step.url, 'HTTP');
+    case 'audio': {
+      const name = step.target === 'mic' ? 'Mic' : step.target === 'output' ? 'Som' : withoutExtension(step.app) || 'App';
+      return step.action === 'up' ? `${name} +` : step.action === 'down' ? `${name} −` : name;
+    }
+    case 'window': return windowShort[step.action];
+    case 'system': return systemShort[step.action];
+    case 'mouse': return mouseShort[step.action];
+    case 'sound': return withoutExtension(lastPart(step.path)) || 'Som';
+    case 'counter': return step.change === 0 ? 'Zerar' : `${step.change > 0 ? '+' : ''}${step.change}`;
+    case 'brightness': return `${step.change > 0 ? '+' : ''}${step.change}%`;
+    case 'obs': return step.action === 'scene' ? step.scene || 'Cena' : obsShort[step.action] ?? (step.source || 'OBS');
+    case 'homeassistant': return step.entity.split('.').pop()?.replace(/_/g, ' ') || 'Casa';
+    case 'midi': return `CC ${step.control}`;
+    case 'voicemeeter': return 'VM';
+    case 'player': return withoutExtension(step.app) || 'Player';
+    default: return stepNames[step.type];
   }
-  if (step.type === 'website') {
-    try { return new URL(step.url).hostname.replace(/^www\./, '').split('.')[0] || 'Site'; }
-    catch { return 'Site'; }
-  }
-  if (step.type === 'hotkey') return comboLabel(step.mods, step.code).join('+') || 'Atalho';
-  return stepNames[step.type];
 }
 // Legenda como numa tecla impressa: ícone ou modificadores em cima, texto principal embaixo.
 function legendFor(binding: Binding): { icon?: IconName; text: string; mods?: string } {
@@ -65,10 +121,14 @@ function legendClass(text: string) {
   const size = longest <= 3 ? 'lg' : longest <= 6 ? 'md' : longest <= 8 ? 'sm' : 'xs';
   return `legend-${size}${/\s/.test(text.trim()) ? ' legend-wrap' : ''}`;
 }
-export function keycapLegend(binding: Binding) {
+// A legenda personalizada (texto e ícone) substitui a gerada; a cor fica a cargo da keycap.
+export function keycapLegend(binding: Binding, label?: Label) {
   const legend = legendFor(binding);
+  const custom = label && binding.kind !== 'empty' ? label : undefined;
+  const glyph = custom?.icon && isIconName(custom.icon) ? custom.icon : legend.icon;
+  const text = custom?.text.trim() || legend.text;
   return h('span', { class: 'keycap-legend' },
-    legend.icon ? icon(legend.icon) : null,
-    legend.mods ? h('small', {}, legend.mods) : null,
-    legend.text ? h('span', { class: legendClass(legend.text) }, legend.text) : null);
+    glyph ? icon(glyph) : null,
+    !custom?.text.trim() && legend.mods ? h('small', {}, legend.mods) : null,
+    text ? h('span', { class: legendClass(text) }, text) : null);
 }

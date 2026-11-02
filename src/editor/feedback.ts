@@ -1,13 +1,17 @@
 // Retorno ao usuário: registro de atividade, avisos flutuantes e diálogo de confirmação.
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { $, h } from '../lib/dom.ts';
 import { icon } from '../lib/icons.ts';
 
-export function log(message: string) {
+// O registro também vai para o arquivo de log do app ("persist"); mensagens que já vieram do Rust,
+// que as grava sozinho, ficam só na tela.
+export function log(message: string, persist = true) {
   const element = $('#log');
   if (element.textContent === 'Pronto.') element.textContent = '';
   element.textContent += `[${new Date().toLocaleTimeString('pt-BR')}] ${message}\n`;
   element.scrollTop = element.scrollHeight;
   $('#status-message').textContent = message;
+  if (persist && isTauri()) invoke('log_append', { line: message }).catch(() => {});
 }
 
 export function toast(message: string, tone: 'info' | 'success' | 'error' = 'info') {

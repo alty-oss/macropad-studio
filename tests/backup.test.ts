@@ -7,7 +7,10 @@ const controls = new Map<number, Binding>([
   [4, { kind: 'key', mods: 3, code: 0x16 }],
   [8, { kind: 'media', media: 0xe9 }],
   [12, { kind: 'empty' }],
-  [22, { kind: 'app', multi: true, steps: [{ type: 'open', path: 'C:\\Windows\\notepad.exe', args: '' }, { type: 'delay', ms: 300 }, { type: 'hotkey', mods: 1, code: 0x06 }] }]
+  [22, {
+    kind: 'app', multi: true, mode: 'normal', alt: [], profiles: [],
+    steps: [{ type: 'open', path: 'C:\\Windows\\notepad.exe', args: '', focus: false }, { type: 'delay', ms: 300 }, { type: 'hotkey', mods: 1, code: 0x06 }]
+  }]
 ]);
 
 describe('arquivo de configuração', () => {
@@ -35,6 +38,27 @@ describe('arquivo de configuração', () => {
     const parsed = parseBackup(text, layout);
     expect([...parsed.layers.get(2)!]).toEqual([[9, { kind: 'media', media: 0xe2 }]]);
     expect(parsed.skipped).toBe(5);
+  });
+
+  test('preserva modo, etapas alternativas, perfis e legendas', () => {
+    const binding: Binding = {
+      kind: 'app', multi: true, mode: 'toggle',
+      steps: [{ type: 'obs', action: 'scene', scene: 'Jogo', source: '', amount: 0 }],
+      alt: [{ type: 'obs', action: 'scene', scene: 'Câmera', source: '', amount: 0 }],
+      profiles: [{ app: 'photoshop.exe', steps: [{ type: 'hotkey', mods: 1, code: 0x1d }] }]
+    };
+    const labels = [{ layer: 1, slot: 4, text: 'Cena', icon: 'video', color: '#3286ff' }, { layer: 2, slot: 40, text: 'fora', icon: '', color: '' }];
+    const parsed = parseBackup(serializeBackup(layout, new Map([[1, new Map([[4, binding]])]]), labels), layout);
+    expect(parsed.layers.get(1)?.get(4)).toEqual(binding);
+    expect(parsed.labels).toEqual([labels[0]]);
+  });
+
+  test('lê arquivos da versão 1, sem os campos novos', () => {
+    const text = JSON.stringify({
+      format: 'macropad-studio', version: 1, exportedAt: '', layout,
+      layers: [{ layer: 1, controls: { 3: { kind: 'app', multi: false, steps: [{ type: 'text', text: 'oi' }] } } }]
+    });
+    expect(parseBackup(text, layout).layers.get(1)?.get(3)).toEqual({ kind: 'app', multi: false, mode: 'normal', alt: [], profiles: [], steps: [{ type: 'text', text: 'oi', paste: false }] });
   });
 
   test('recusa arquivos que não são do Macropad Studio', () => {

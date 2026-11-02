@@ -1,6 +1,6 @@
 [package]
 name = "macropad-studio"
-version = "0.2.0"
+version = "0.3.0"
 description = "Configurador e executor de ações para macropads CH57x"
 edition = "2021"
 
@@ -11,16 +11,51 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-notification = "2"
 tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 hidapi = "2"
+# Requisições HTTP (webhooks, Home Assistant) e o obs-websocket.
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+tungstenite = "0.24"
+sha2 = "0.10"
+base64 = "0.22"
 windows-sys = { version = "0.59", features = [
+  "Win32_Devices_Display",
   "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_Media",
+  "Win32_Media_Audio",
+  "Win32_Media_Multimedia",
+  "Win32_Security",
+  "Win32_Security_Credentials",
   "Win32_System_Com",
+  "Win32_System_DataExchange",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Memory",
+  "Win32_System_Power",
+  "Win32_System_ProcessStatus",
+  "Win32_System_Registry",
+  "Win32_System_Shutdown",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
+] }
+# Interfaces COM e WinRT que o windows-sys não traz: volume (Core Audio) e players (SMTC).
+windows = { version = "0.58", features = [
+  "Foundation",
+  "Foundation_Collections",
+  "Media_Control",
+  "Win32_Foundation",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Win32_System_Com",
+  "Win32_System_Threading",
+  "Win32_UI_Shell_PropertiesSystem",
 ] }
 
 [profile.release]

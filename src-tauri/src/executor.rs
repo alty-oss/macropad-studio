@@ -1,8 +1,21 @@
-// Executor das etapas: abrir arquivos e sites, digitar texto e enviar atalhos.
-use crate::{config::Step, virtual_keys::held_modifiers};
+// Executor das ações do app. Cada (camada, slot) tem uma thread própria: uma macro longa não
+// atrasa as outras teclas, e giros de knob que chegam durante uma execução são somados.
+use crate::{
+    audio,
+    config::{Macro, Mode, Step},
+    integrations, system,
+    obs::Obs,
+    virtual_keys::held_modifiers,
+};
 use std::{
+    collections::HashMap,
     mem::size_of,
+    os::windows::process::CommandExt,
     ptr::{null, null_mut},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        mpsc, Arc,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -18,39 +31,236 @@ use windows_sys::Win32::{
     },
 };
 
-// O ShellExecute recomenda COM inicializado na thread que o chama.
+// Segurar a tecla por mais que isto executa as etapas de "segurar" (modo Hold).
+const HOLD: Duration = Duration::from_millis(450);
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+// "Parar ações em execução" incrementa a geração; as execuções em andamento param na próxima etapa.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
+pub fn cancel_all() {
+    GENERATION.fetch_add(1, Ordering::SeqCst);
+}
+
+// O ShellExecute (e o Core Audio) pedem COM inicializado na thread que os chama.
 pub fn init_thread() {
     unsafe {
         CoInitializeEx(null(), (COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) as u32);
     }
 }
 
-pub fn run(steps: &[Step], from_device: bool) -> Result<(), String> {
+// O que o executor precisa do resto do app.
+pub trait Host: Send + Sync + 'static {
+    fn lookup(&self, layer: u8, slot: u8) -> Option<Macro>;
+    fn obs(&self) -> &'static Obs;
+    // Endereço e token do Home Assistant.
+    fn home_assistant(&self) -> (String, String);
+    // Tecla virtual pressionada ou solta, para a interface acompanhar.
+    fn pressed(&self, layer: u8, slot: u8, down: bool);
+    // Resultado de uma execução: textos para o OSD, avisos e o erro, se houver.
+    fn report(&self, origin: Option<(u8, u8)>, steps: &[Step], outcome: Outcome);
+}
+
+#[derive(Default)]
+pub struct Outcome {
+    pub feedback: Vec<String>,
+    pub warnings: Vec<String>,
+    pub error: Option<String>,
+}
+
+pub enum Job {
+    Key(u8, u8, bool),
+    Run(Vec<Step>),
+}
+
+// Distribui os eventos: cada slot tem sua fila e sua thread; os testes da interface, outra.
+pub fn spawn(host: Arc<dyn Host>) -> mpsc::Sender<Job> {
+    let (jobs, queue) = mpsc::channel::<Job>();
+    thread::spawn(move || {
+        let mut workers: HashMap<(u8, u8), mpsc::Sender<bool>> = HashMap::new();
+        let (tests, test_queue) = mpsc::channel::<Vec<Step>>();
+        let test_host = host.clone();
+        thread::spawn(move || {
+            init_thread();
+            for steps in test_queue {
+                let outcome = execute(test_host.as_ref(), &steps, false);
+                test_host.report(None, &steps, outcome);
+            }
+        });
+        for job in queue {
+            match job {
+                Job::Run(steps) => {
+                    tests.send(steps).ok();
+                }
+                Job::Key(layer, slot, down) => {
+                    host.pressed(layer, slot, down);
+                    let worker = workers.entry((layer, slot)).or_insert_with(|| {
+                        let (events, receiver) = mpsc::channel();
+                        let host = host.clone();
+                        thread::spawn(move || slot_worker(host.as_ref(), layer, slot, receiver));
+                        events
+                    });
+                    worker.send(down).ok();
+                }
+            }
+        }
+    });
+    jobs
+}
+
+// Etapas do perfil do programa em foco, ou as etapas padrão.
+fn resolve(item: &Macro) -> Vec<Step> {
+    if !item.profiles.is_empty() {
+        if let Some(app) = system::foreground_app() {
+            if let Some(profile) = item.profiles.iter().find(|profile| profile.app.trim().eq_ignore_ascii_case(&app)) {
+                return profile.steps.clone();
+            }
+        }
+    }
+    item.steps.clone()
+}
+
+fn slot_worker(host: &dyn Host, layer: u8, slot: u8, events: mpsc::Receiver<bool>) {
+    init_thread();
+    let mut toggled = false;
+    let run = |steps: &[Step]| {
+        let outcome = execute(host, steps, true);
+        host.report(Some((layer, slot)), steps, outcome);
+    };
+    while let Ok(down) = events.recv() {
+        if !down {
+            continue;
+        }
+        let Some(item) = host.lookup(layer, slot) else { continue };
+        match item.mode {
+            Mode::Normal => {
+                // Pressões (ou giros do knob) que chegaram enquanto a anterior rodava viram uma
+                // execução só, repetida, sem esperar o modificador de novo a cada vez.
+                let mut times = 1;
+                while let Ok(next) = events.try_recv() {
+                    times += next as usize;
+                }
+                let steps = resolve(&item);
+                let repeated: Vec<Step> = (0..times).flat_map(|_| steps.iter().cloned()).collect();
+                run(&repeated);
+            }
+            Mode::Toggle => {
+                let steps = if toggled { item.alt.clone() } else { resolve(&item) };
+                toggled = !toggled;
+                run(&steps);
+            }
+            Mode::Hold => match events.recv_timeout(HOLD) {
+                Ok(_) => run(&resolve(&item)),
+                Err(mpsc::RecvTimeoutError::Timeout) => run(&item.alt),
+                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            },
+        }
+    }
+}
+
+const ELEVATED: &str = "A janela em foco roda como administrador, e o Windows bloqueia texto, atalhos e cliques vindos de programas comuns. Para controlá-la, abra o Macropad Studio como administrador.";
+
+// Executa as etapas em ordem. Para na primeira que falhar ou quando as ações forem canceladas.
+pub fn execute(host: &dyn Host, steps: &[Step], from_device: bool) -> Outcome {
+    let generation = GENERATION.load(Ordering::SeqCst);
+    let mut outcome = Outcome::default();
     if from_device {
-        // O macropad ainda pode estar segurando o Ctrl/Shift da tecla virtual.
+        // O macropad ainda pode estar segurando o Ctrl/Shift da tecla virtual. Se continuar
+        // segurando (tecla mantida pressionada), soltamos para não somar ao atalho.
         let started = Instant::now();
         while held_modifiers() != 0 && started.elapsed() < Duration::from_millis(400) {
             thread::sleep(Duration::from_millis(10));
         }
+        release_modifiers();
     }
     for step in steps {
-        match step {
-            Step::Open { path, args } => shell_open(path, args)?,
-            Step::Website { url } => shell_open(url, "")?,
-            Step::Text { text } => type_text(text),
-            Step::Hotkey { mods, code } => press_combo(*mods, *code)?,
-            Step::Delay { ms } => thread::sleep(Duration::from_millis((*ms).min(60_000))),
+        if GENERATION.load(Ordering::SeqCst) != generation {
+            outcome.warnings.push("Ação interrompida.".into());
+            break;
+        }
+        let needs_input = matches!(step, Step::Text { .. } | Step::Hotkey { .. } | Step::Mouse { .. });
+        if needs_input && system::foreground_blocks_input() && !outcome.warnings.iter().any(|w| w == ELEVATED) {
+            outcome.warnings.push(ELEVATED.into());
+        }
+        match run_step(host, step, generation) {
+            Ok(text) if text.is_empty() => {}
+            Ok(text) => outcome.feedback.push(text),
+            Err(error) => {
+                outcome.error = Some(error);
+                break;
+            }
         }
     }
-    Ok(())
+    outcome
 }
 
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain(Some(0)).collect()
+fn cancelled(generation: u64) -> bool {
+    GENERATION.load(Ordering::SeqCst) != generation
+}
+
+fn sleep(ms: u64, generation: u64) {
+    let until = Instant::now() + Duration::from_millis(ms.min(60_000));
+    while Instant::now() < until && !cancelled(generation) {
+        thread::sleep(until.saturating_duration_since(Instant::now()).min(Duration::from_millis(25)));
+    }
+}
+
+fn run_step(host: &dyn Host, step: &Step, generation: u64) -> Result<String, String> {
+    let done = |result: Result<(), String>| result.map(|_| String::new());
+    match step {
+        Step::Open { path, args, focus } => {
+            if *focus && system::focus_program(path) {
+                return Ok(String::new());
+            }
+            done(shell_open(path, args))
+        }
+        Step::Website { url } => done(shell_open(url, "")),
+        Step::Text { text, paste } => {
+            let text = expand_variables(text);
+            if *paste { done(paste_text(&text)) } else { done(type_text(&text, generation)) }
+        }
+        Step::Hotkey { mods, code } => done(press_combo(*mods, *code)),
+        Step::Delay { ms } => {
+            sleep(*ms, generation);
+            Ok(String::new())
+        }
+        Step::Media { key } => done(media_key(key)),
+        Step::Command { command, hidden } => done(run_command(command, *hidden)),
+        Step::Http { method, url, headers, body } => integrations::http(method, url, headers, body),
+        Step::Audio { target, app, action, amount } => audio::run(target, app, action, *amount),
+        Step::Window { action } if action == "nextMonitor" => done(press_combo(0x08 | 0x02, 0x4f)),
+        Step::Window { action } => system::window(action),
+        Step::System { action } => system::system(action),
+        Step::Mouse { action, amount } => done(system::mouse(action, *amount)),
+        Step::Sound { path } => done(system::sound(path)),
+        Step::Counter { path, change } => system::counter(path, *change),
+        Step::Brightness { change } => system::brightness(*change),
+        Step::Obs { action, scene, source, amount } => host.obs().run_action(action, scene, source, *amount),
+        Step::Homeassistant { service, entity } => {
+            let (url, token) = host.home_assistant();
+            integrations::home_assistant(&url, &token, service, entity)
+        }
+        Step::Midi { port, channel, control, mode, value } => integrations::midi(port, *channel, *control, mode, *value),
+        Step::Voicemeeter { parameter, mode, value } => integrations::voicemeeter(parameter, mode, *value),
+        Step::Player { app, action } => audio::player(app, action),
+    }
+}
+
+// Variáveis do texto: {data}, {hora} e {clipboard}.
+pub fn expand_variables(text: &str) -> String {
+    if !text.contains('{') {
+        return text.to_string();
+    }
+    let (date, time) = system::local_date_time();
+    let mut result = text.replace("{data}", &date).replace("{hora}", &time);
+    if result.contains("{clipboard}") {
+        result = result.replace("{clipboard}", &system::clipboard_text().unwrap_or_default());
+    }
+    result
 }
 
 fn shell_open(target: &str, args: &str) -> Result<(), String> {
-    let (operation, file, parameters) = (wide("open"), wide(target.trim()), wide(args.trim()));
+    let (operation, file, parameters) = (system::wide("open"), system::wide(target.trim()), system::wide(args.trim()));
     let parameters = if args.trim().is_empty() { null() } else { parameters.as_ptr() };
     let result = unsafe { ShellExecuteW(null_mut(), operation.as_ptr(), file.as_ptr(), parameters, null(), SW_SHOWNORMAL) };
     // Valores até 32 indicam erro, conforme a documentação do ShellExecute.
@@ -58,6 +268,17 @@ fn shell_open(target: &str, args: &str) -> Result<(), String> {
         return Err(format!("Não foi possível abrir {target}."));
     }
     Ok(())
+}
+
+// Roda pelo cmd. Oculto, o comando não abre janela; um código de saída diferente de zero não é
+// acompanhado, porque o comando pode continuar rodando depois da ação.
+fn run_command(command: &str, hidden: bool) -> Result<(), String> {
+    let mut process = std::process::Command::new("cmd");
+    process.raw_arg(format!("/C {}", command.trim()));
+    if hidden {
+        process.creation_flags(CREATE_NO_WINDOW);
+    }
+    process.spawn().map(|_| ()).map_err(|e| format!("Não foi possível executar o comando: {e}"))
 }
 
 fn key_input(scan: u16, virtual_key: u16, flags: u32) -> INPUT {
@@ -73,7 +294,20 @@ fn send(inputs: &[INPUT]) {
     }
 }
 
-fn type_text(text: &str) {
+// Solta os modificadores que continuam pressionados (pelo macropad, numa tecla mantida).
+fn release_modifiers() {
+    let held = held_modifiers();
+    let inputs: Vec<INPUT> = MODIFIERS
+        .iter()
+        .filter(|(bit, ..)| held & bit != 0)
+        .map(|(_, scan, extended)| key_input(*scan, 0, KEYEVENTF_SCANCODE | KEYEVENTF_KEYUP | if *extended { KEYEVENTF_EXTENDEDKEY } else { 0 }))
+        .collect();
+    if !inputs.is_empty() {
+        send(&inputs);
+    }
+}
+
+fn type_text(text: &str, generation: u64) -> Result<(), String> {
     let mut inputs = Vec::new();
     for unit in text.replace("\r\n", "\n").encode_utf16() {
         if unit == '\n' as u16 {
@@ -85,8 +319,68 @@ fn type_text(text: &str) {
         }
     }
     for chunk in inputs.chunks(64) {
+        if cancelled(generation) {
+            break;
+        }
         send(chunk);
         thread::sleep(Duration::from_millis(2));
+    }
+    Ok(())
+}
+
+// Cola pela área de transferência (Ctrl+V) e depois devolve o que estava nela.
+fn paste_text(text: &str) -> Result<(), String> {
+    let previous = system::clipboard_text();
+    system::set_clipboard_text(text)?;
+    press_combo(0x01, 0x19)?;
+    // O programa de destino lê a área de transferência depois de receber o Ctrl+V.
+    thread::sleep(Duration::from_millis(250));
+    if let Some(previous) = previous {
+        system::set_clipboard_text(&previous).ok();
+    }
+    Ok(())
+}
+
+// Teclas de mídia e volume do Windows, para uso dentro de multi-ações.
+fn media_key(key: &str) -> Result<(), String> {
+    let code: u16 = match key {
+        "playPause" => 0xb3,
+        "next" => 0xb0,
+        "prev" => 0xb1,
+        "stop" => 0xb2,
+        "volumeUp" => 0xaf,
+        "volumeDown" => 0xae,
+        "mute" => 0xad,
+        _ => return Err(format!("Tecla de mídia desconhecida: {key}.")),
+    };
+    send(&[key_input(0, code, KEYEVENTF_EXTENDEDKEY), key_input(0, code, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP)]);
+    Ok(())
+}
+
+// Texto curto que descreve uma etapa, para o OSD.
+pub fn describe(step: &Step) -> String {
+    let file_name = |path: &str| path.split(['\\', '/']).rfind(|part| !part.is_empty()).unwrap_or(path).to_string();
+    match step {
+        Step::Open { path, .. } => file_name(path),
+        Step::Website { url } => url.trim_start_matches("https://").trim_start_matches("http://").split('/').next().unwrap_or(url).to_string(),
+        Step::Text { .. } => "Texto digitado".into(),
+        Step::Hotkey { .. } => "Atalho".into(),
+        Step::Delay { .. } => "Aguardar".into(),
+        Step::Media { .. } => "Mídia".into(),
+        Step::Command { .. } => "Comando".into(),
+        Step::Http { url, .. } => url.trim_start_matches("https://").trim_start_matches("http://").split('/').next().unwrap_or(url).to_string(),
+        Step::Audio { .. } => "Áudio".into(),
+        Step::Window { .. } => "Janela".into(),
+        Step::System { .. } => "Sistema".into(),
+        Step::Mouse { .. } => "Mouse".into(),
+        Step::Sound { path } => file_name(path),
+        Step::Counter { .. } => "Contador".into(),
+        Step::Brightness { .. } => "Brilho".into(),
+        Step::Obs { .. } => "OBS".into(),
+        Step::Homeassistant { entity, .. } => entity.clone(),
+        Step::Midi { .. } => "MIDI".into(),
+        Step::Voicemeeter { parameter, .. } => parameter.clone(),
+        Step::Player { .. } => "Player".into(),
     }
 }
 
@@ -183,4 +477,33 @@ fn press_combo(mods: u8, code: u8) -> Result<(), String> {
     inputs.extend(active.iter().rev().map(|(_, scan, extended)| key(*scan, *extended, true)));
     send(&inputs);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn letras_e_setas_viram_scancodes() {
+        assert_eq!(scan_code(0x04), Some((0x1e, false)));
+        assert_eq!(scan_code(0x4f), Some((0x4d, true)));
+        assert_eq!(scan_code(0x68), Some((0x64, false)));
+        assert_eq!(scan_code(0x73), Some((0x76, false)));
+        assert_eq!(scan_code(0x01), None);
+    }
+
+    #[test]
+    fn todas_as_teclas_do_editor_tem_scancode() {
+        // Usos HID do teclado virtual (src/device/keys.ts), exceto F13–F24, que vêm a seguir.
+        let codes = (0x04..=0x31).chain(0x33..=0x65).chain([0x87]);
+        for code in codes {
+            assert!(scan_code(code).is_some(), "uso 0x{code:02x} sem scancode");
+        }
+    }
+
+    #[test]
+    fn texto_sem_variaveis_fica_igual() {
+        assert_eq!(expand_variables("Olá, {nome}"), "Olá, {nome}");
+        assert!(!expand_variables("{data} {hora}").contains('{'));
+    }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissões da janela principal",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "description": "Permissões da janela principal e do OSD",
+  "windows": ["main", "osd"],
+  "permissions": ["core:default", "core:window:allow-set-theme"]
 }

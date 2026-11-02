@@ -1,19 +1,24 @@
 // Moldura da janela: tela de conexão, cabeçalho (camadas, gravar), faixa de aviso e rodapé.
+import { invoke } from '@tauri-apps/api/core';
 import { transport } from '../device/transport.ts';
 import { $, h } from '../lib/dom.ts';
 import { icon } from '../lib/icons.ts';
 import { plural } from '../lib/text.ts';
+import { canRedo, canUndo } from './editing.ts';
 import { connect, switchLayer } from './session.ts';
 import { dirtyCount, state, tauri } from './state.ts';
 
 export function renderLayers() {
   $('#layers').replaceChildren(...state.layers.map((layer, index) => {
     const number = index + 1;
+    // A camada ativa no aparelho é deduzida da última tecla virtual recebida.
+    const live = number === state.detectedLayer;
+    const parts = [`Camada ${number}`, live ? 'ativa no macropad' : '', layer.drafts.size ? plural(layer.drafts.size, 'alteração não gravada', 'alterações não gravadas') : ''];
     return h('button', {
-      type: 'button', role: 'radio', class: 'segment', 'aria-checked': String(number === state.layer), disabled: state.busy,
-      'aria-label': layer.drafts.size ? `Camada ${number} · ${plural(layer.drafts.size, 'alteração não gravada', 'alterações não gravadas')}` : `Camada ${number}`,
+      type: 'button', role: 'radio', class: `segment${live ? ' live' : ''}`, 'aria-checked': String(number === state.layer), disabled: state.busy,
+      'aria-label': parts.filter(Boolean).join(' · '), title: live ? 'Camada ativa no macropad (detectada pela última tecla do app)' : null,
       onclick: () => switchLayer(number)
-    }, String(number), layer.drafts.size ? h('span', { class: 'segment-dot' }) : null);
+    }, String(number), layer.drafts.size ? h('span', { class: 'segment-dot' }) : null, live ? h('span', { class: 'segment-live' }) : null);
   }));
 }
 
@@ -39,15 +44,29 @@ export function renderChrome() {
   $('#sync-state').classList.toggle('pending', Boolean(count) && !state.progress);
   $<HTMLButtonElement>('#save').disabled = state.busy || !connected || !count;
   $<HTMLButtonElement>('#read').disabled = state.busy || !connected;
+  $<HTMLButtonElement>('#undo').disabled = state.busy || !canUndo();
+  $<HTMLButtonElement>('#redo').disabled = state.busy || !canRedo();
 
-  const banner = !connected && (state.everConnected
+  const offlineBanner = !connected && (state.everConnected
     ? 'Macropad desconectado. Suas alterações continuam aqui; reconecte o cabo para gravar.'
     : state.offline ? 'Modo sem dispositivo: prepare as ações e conecte o macropad para gravar.' : '');
+  const pausedBanner = state.keysPaused ? 'Teclas virtuais pausadas: as ações do app não são executadas até você retomar.' : '';
+  const banner = offlineBanner || pausedBanner;
   $('#banner').hidden = !banner;
   $('#banner-text').textContent = banner || '';
   $('#banner').querySelector('button')?.remove();
-  if (banner && !transport.native && transport.supported) $('#banner').append(h('button', { type: 'button', class: 'btn btn-small', onclick: connect }, 'Conectar'));
+  if (offlineBanner && !transport.native && transport.supported) $('#banner').append(h('button', { type: 'button', class: 'btn btn-small', onclick: connect }, 'Conectar'));
+  else if (!offlineBanner && pausedBanner) $('#banner').append(h('button', { type: 'button', class: 'btn btn-small', onclick: () => setKeysPaused(false) }, 'Retomar'));
 
   $('#status-device').replaceChildren(h('span', { class: `status-dot${connected ? ' on' : ''}` }), connected ? 'Macropad conectado · USB 1189:8840' : state.connection === 'connecting' ? 'Conectando…' : 'Sem dispositivo');
-  $('#status-mode').textContent = tauri ? `${plural(state.macros.length, 'tecla virtual ativa', 'teclas virtuais ativas')}` : 'Navegador · ações do app indisponíveis';
+  const obs = state.obs.connected ? ['OBS conectado', state.obs.recording ? '● Gravando' : '', state.obs.streaming ? '● Ao vivo' : ''].filter(Boolean).join(' · ') : '';
+  $('#status-mode').textContent = tauri
+    ? [obs, plural(state.macros.length, 'tecla virtual ativa', 'teclas virtuais ativas')].filter(Boolean).join('  ·  ')
+    : 'Navegador · ações do app indisponíveis';
+}
+
+export async function setKeysPaused(paused: boolean) {
+  if (tauri) await invoke('keys_paused_set', { paused });
+  state.keysPaused = paused;
+  renderChrome();
 }

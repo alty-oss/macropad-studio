@@ -1,6 +1,6 @@
 // Biblioteca de ações à direita: categorias, busca e atribuição por clique ou arrastar.
 import { media } from '../device/keys.ts';
-import { newStep, type Binding, type StepType } from '../device/protocol.ts';
+import { newStep, type Binding, type Step, type StepOf, type StepType } from '../device/protocol.ts';
 import { $, h } from '../lib/dom.ts';
 import { icon, type IconName } from '../lib/icons.ts';
 import { normalize } from '../lib/text.ts';
@@ -13,9 +13,21 @@ import { bindingAt, controlLabel, state, tauri } from './state.ts';
 interface ActionItem { id: string; name: string; description?: string; icon: IconName; make: () => Binding; is: (binding: Binding) => boolean }
 interface ActionGroup { title: string; app?: boolean; items: ActionItem[] }
 
-const appAction = (type: StepType): Binding => ({ kind: 'app', multi: false, steps: [newStep(type)] });
-// "is" reconhece a ação já atribuída ao controle selecionado, para destacá-la na lista.
-const isApp = (type: StepType) => (binding: Binding) => binding.kind === 'app' && !binding.multi && binding.steps[0]?.type === type;
+// Ação do app de uma etapa só, já preenchida. "is" reconhece a ação atribuída ao controle selecionado,
+// para destacá-la na lista; "match" distingue itens do mesmo tipo de etapa (OBS, áudio…).
+function appItem(id: string, name: string, description: string, glyph: IconName, step: Step, match: (step: Step) => boolean = () => true): ActionItem {
+  return {
+    id, name, description, icon: glyph,
+    make: () => ({ kind: 'app', multi: false, steps: [structuredClone(step)] }),
+    is: binding => binding.kind === 'app' && !binding.multi && binding.steps[0]?.type === step.type && match(binding.steps[0])
+  };
+}
+const fresh = (type: StepType) => newStep(type);
+const obs = (action: StepOf<'obs'>['action']): Step => ({ ...newStep('obs') as StepOf<'obs'>, action });
+const isObs = (...actions: string[]) => (step: Step) => step.type === 'obs' && actions.includes(step.action);
+const audio = (target: StepOf<'audio'>['target'], action: StepOf<'audio'>['action']): Step => ({ ...newStep('audio') as StepOf<'audio'>, target, action });
+const isAudio = (target: string) => (step: Step) => step.type === 'audio' && step.target === target;
+
 const library: ActionGroup[] = [
   { title: 'Teclado', items: [{ id: 'key', name: 'Atalho de teclado', description: 'Combinação gravada no macropad', icon: 'keyboard', make: () => ({ kind: 'key', mods: 0, code: null }), is: binding => binding.kind === 'key' }] },
   {
@@ -25,10 +37,45 @@ const library: ActionGroup[] = [
   },
   {
     title: 'Sistema', app: true, items: [
-      { id: 'open', name: 'Abrir', description: 'Arquivo, pasta ou programa', icon: 'folder', make: () => appAction('open'), is: isApp('open') },
-      { id: 'website', name: 'Site', description: 'Abre no navegador padrão', icon: 'globe', make: () => appAction('website'), is: isApp('website') },
-      { id: 'text', name: 'Digitar texto', description: 'Escreve um texto pronto', icon: 'text', make: () => appAction('text'), is: isApp('text') },
-      { id: 'multi', name: 'Multi-ação', description: 'Várias etapas em sequência', icon: 'multi', make: () => ({ kind: 'app', multi: true, steps: [] }), is: binding => binding.kind === 'app' && binding.multi }
+      appItem('open', 'Abrir', 'Arquivo, pasta ou programa', 'folder', fresh('open')),
+      appItem('website', 'Site', 'Abre no navegador padrão', 'globe', fresh('website')),
+      appItem('text', 'Digitar texto', 'Escreve um texto pronto', 'text', fresh('text')),
+      { id: 'multi', name: 'Multi-ação', description: 'Etapas em sequência, alternar, segurar, perfis', icon: 'multi', make: () => ({ kind: 'app', multi: true, steps: [] }), is: binding => binding.kind === 'app' && binding.multi },
+      appItem('command', 'Comando', 'cmd, PowerShell ou script', 'terminal', fresh('command')),
+      appItem('window', 'Janela', 'Minimizar, maximizar, mover…', 'window', fresh('window')),
+      appItem('system', 'Sistema', 'Bloquear, suspender, tema…', 'power', fresh('system')),
+      appItem('mouse', 'Mouse', 'Cliques e rolagem', 'mouse', fresh('mouse')),
+      appItem('brightness', 'Brilho do monitor', 'DDC/CI, ótimo num knob', 'sun', fresh('brightness'))
+    ]
+  },
+  {
+    title: 'Áudio', app: true, items: [
+      appItem('mic', 'Mudo do microfone', 'Em qualquer app de chamada', 'mic', audio('mic', 'toggle'), isAudio('mic')),
+      appItem('output-volume', 'Volume do sistema', 'Saída padrão, em passos', 'volumeUp', audio('output', 'up'), isAudio('output')),
+      appItem('app-volume', 'Volume de um programa', 'Spotify, Discord, jogo…', 'volumeUp', audio('app', 'up'), isAudio('app')),
+      appItem('player', 'Player', 'Controla um player específico', 'playPause', fresh('player')),
+      appItem('media-key', 'Tecla de mídia', 'Para usar em multi-ações', 'next', fresh('media')),
+      appItem('sound', 'Tocar som', 'Soundboard (MP3, WAV)', 'music', fresh('sound'))
+    ]
+  },
+  {
+    title: 'Streaming', app: true, items: [
+      appItem('obs-scene', 'OBS · Trocar de cena', 'Cena do OBS Studio', 'obs', obs('scene'), isObs('scene')),
+      appItem('obs-record', 'OBS · Gravação', 'Iniciar, parar, pausar', 'obs', obs('record'), isObs('record', 'recordStart', 'recordStop', 'recordPause', 'chapter')),
+      appItem('obs-stream', 'OBS · Transmissão', 'Entrar e sair do ar', 'obs', obs('stream'), isObs('stream', 'streamStart', 'streamStop')),
+      appItem('obs-mute', 'OBS · Silenciar fonte', 'Microfone, áudio do desktop', 'mic', obs('mute'), isObs('mute')),
+      appItem('obs-volume', 'OBS · Volume de fonte', 'Em dB, ótimo num knob', 'volumeUp', obs('volume'), isObs('volume')),
+      appItem('obs-visibility', 'OBS · Mostrar / esconder', 'Câmera, overlay, "volto já"', 'eye', obs('visibility'), isObs('visibility')),
+      appItem('obs-replay', 'OBS · Salvar replay', 'Clipe dos últimos segundos', 'obs', obs('replay'), isObs('replay', 'virtualcam', 'transition')),
+      appItem('counter', 'Contador', 'Número num arquivo de texto', 'hash', fresh('counter'))
+    ]
+  },
+  {
+    title: 'Integrações', app: true, items: [
+      appItem('http', 'Requisição HTTP', 'Webhooks, n8n, IFTTT, APIs', 'link', fresh('http')),
+      appItem('homeassistant', 'Home Assistant', 'Luzes, tomadas, cenas', 'home', fresh('homeassistant')),
+      appItem('midi', 'MIDI', 'Control change para DAWs', 'sliders', fresh('midi')),
+      appItem('voicemeeter', 'Voicemeeter', 'Ganho e mudo de strips e buses', 'sliders', fresh('voicemeeter'))
     ]
   },
   { title: 'Geral', items: [{ id: 'empty', name: 'Sem ação', description: 'Limpa o controle', icon: 'empty', make: () => ({ kind: 'empty' }), is: binding => binding.kind === 'empty' }] }

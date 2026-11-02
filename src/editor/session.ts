@@ -1,6 +1,6 @@
 // Sessão com o dispositivo: conexão, leitura das camadas e gravação das alterações.
 import { invoke } from '@tauri-apps/api/core';
-import { appBindingError, decode, encode, equalBinding, virtualCode, type Binding } from '../device/protocol.ts';
+import { appBindingError, appParts, decode, encode, equalBinding, virtualCode, type Binding } from '../device/protocol.ts';
 import { transport } from '../device/transport.ts';
 import { errorText, plural } from '../lib/text.ts';
 import { renderBoard } from './board.ts';
@@ -8,7 +8,7 @@ import { renderChrome, renderLayers } from './chrome.ts';
 import { confirmDialog, log, toast } from './feedback.ts';
 import { renderInspector } from './inspector.ts';
 import { stopCapture } from './shortcuts.ts';
-import { controlLabel, dirtyCount, layerData, macroBinding, state, tauri } from './state.ts';
+import { allSlots, controlLabel, dirtyCount, layerData, macroBinding, state, tauri } from './state.ts';
 
 // Mensagem do Rust (device.rs) quando o macropad não está ligado.
 const NOT_FOUND = 'Macropad não encontrado';
@@ -23,10 +23,7 @@ function setBusy(busy: boolean) {
 async function readLayer(number: number, discardDrafts = false) {
   const expected = state.layout.keys + state.layout.knobs * 3;
   const replies = await transport.ask([0xfa, state.layout.keys, state.layout.knobs, number], expected, 2800);
-  const knownSlots = new Set([
-    ...Array.from({ length: state.layout.keys }, (_, i) => i + 1),
-    ...Array.from({ length: state.layout.knobs * 3 }, (_, i) => 16 + i)
-  ]);
+  const knownSlots = new Set(allSlots());
   const records = new Map<number, Binding>();
   for (const reply of replies) {
     if (reply[0] !== 0xfa || !knownSlots.has(reply[1])) continue;
@@ -120,10 +117,16 @@ async function persistMacros(changes: Change[]) {
   const macros = state.macros.filter(item => !touched.has(`${item.layer}:${item.slot}`));
   for (const change of changes) {
     if (change.binding.kind !== 'app') continue;
-    macros.push({ layer: change.layer, slot: change.slot, ...virtualCode(change.layer, change.slot), multi: change.binding.multi, steps: change.binding.steps });
+    macros.push({ layer: change.layer, slot: change.slot, ...virtualCode(change.layer, change.slot), ...appParts(change.binding) });
   }
   await invoke('macros_save', { macros });
   state.macros = macros;
+}
+
+// O dispositivo confirma a tecla virtual de uma ação do app; as etapas são conferidas no app.
+function confirmedBy(records: Map<number, Binding>, change: Change) {
+  const record = records.get(change.slot);
+  return change.binding.kind === 'app' ? record?.kind === 'app' : equalBinding(record, change.binding);
 }
 
 export async function save() {
@@ -148,12 +151,11 @@ export async function save() {
     : 'As etapas ficam salvas no app; o macropad já envia as teclas virtuais desses controles.';
   if (!await confirmDialog(`Gravar ${plural(changes.length, 'alteração', 'alterações')}?`, text, 'Gravar')) return;
   setBusy(true);
+  // As etapas só vão para o app depois que o macropad confirma o controle: se a gravação falhar no
+  // meio, app e dispositivo continuam de acordo e o rascunho fica para tentar de novo.
+  const confirmed = changes.filter(change => !change.payload);
+  let interrupted = false;
   try {
-    if (tauri) await persistMacros(changes);
-    for (const change of changes.filter(item => !item.payload)) {
-      layerData(change.layer).records.set(change.slot, structuredClone(change.binding));
-      layerData(change.layer).drafts.delete(change.slot);
-    }
     for (const [index, change] of writes.entries()) {
       state.progress = `Gravando ${index + 1}/${writes.length}…`;
       renderChrome();
@@ -165,19 +167,32 @@ export async function save() {
     }
     state.progress = 'Verificando…';
     renderChrome();
-    let verified = changes.length - writes.length;
     for (const number of new Set(writes.map(change => change.layer))) {
       const records = await readLayer(number);
-      verified += writes.filter(change => change.layer === number && equalBinding(records.get(change.slot), change.binding)).length;
+      confirmed.push(...writes.filter(change => change.layer === number && confirmedBy(records, change)));
     }
-    log(`${verified}/${changes.length} alterações confirmadas.`);
-    if (verified === changes.length) toast(`${plural(verified, 'alteração gravada', 'alterações gravadas')}.`, 'success');
-    else toast(`O dispositivo confirmou ${verified} de ${changes.length} alterações. As demais continuam marcadas para revisão.`, 'error');
   } catch (error) {
+    interrupted = true;
     log(`Gravação interrompida: ${errorText(error)}`);
     toast(`Gravação interrompida: ${errorText(error)}`, 'error');
+  }
+  try {
+    if (tauri && confirmed.length) await persistMacros(confirmed);
+    for (const change of confirmed) {
+      if (change.binding.kind !== 'app') continue;
+      layerData(change.layer).records.set(change.slot, structuredClone(change.binding));
+      layerData(change.layer).drafts.delete(change.slot);
+    }
+    log(`${confirmed.length}/${changes.length} alterações confirmadas.`);
+    if (!interrupted) {
+      if (confirmed.length === changes.length) toast(`${plural(confirmed.length, 'alteração gravada', 'alterações gravadas')}.`, 'success');
+      else toast(`O dispositivo confirmou ${confirmed.length} de ${changes.length} alterações. As demais continuam marcadas para revisão.`, 'error');
+    }
+  } catch (error) {
+    log(`Etapas não salvas no app: ${errorText(error)}`);
+    toast(`O macropad foi gravado, mas as etapas não foram salvas no app: ${errorText(error)}. Clique em Gravar de novo.`, 'error');
   } finally {
     setBusy(false);
-    renderBoard(); renderInspector();
+    renderBoard(); renderLayers(); renderChrome(); renderInspector();
   }
 }
