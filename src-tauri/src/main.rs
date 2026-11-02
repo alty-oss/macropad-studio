@@ -11,6 +11,7 @@ mod integrations;
 mod mobile;
 mod obs;
 mod secrets;
+mod states;
 mod system;
 mod virtual_keys;
 

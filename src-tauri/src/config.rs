@@ -109,12 +109,7 @@ pub enum Step {
         #[serde(default)]
         value: f64,
     },
-    Player {
-        #[serde(default)]
-        app: String,
-        action: String,
-    },
-    // Etapa de um tipo que o app não tem mais (Home Assistant e MIDI, por exemplo). Só existe para
+    // Etapa de um tipo que o app não tem mais (Home Assistant, MIDI e Player, por exemplo). Só existe para
     // ler arquivos antigos sem perder o resto; Config::load as descarta.
     #[serde(other)]
     Removed,
@@ -367,7 +362,7 @@ impl Config {
                 if removed == 0 { return (config, None); }
                 // Grava já sem elas, para o aviso aparecer uma vez só.
                 let saved = config.save(path);
-                let notice = format!("{removed} {} de recursos que saíram do app (Home Assistant, MIDI) {} das ações.", if removed == 1 { "etapa" } else { "etapas" }, if removed == 1 { "foi removida" } else { "foram removidas" });
+                let notice = format!("{removed} {} de recursos que saíram do app (Home Assistant, MIDI, Player) {} das ações.", if removed == 1 { "etapa" } else { "etapas" }, if removed == 1 { "foi removida" } else { "foram removidas" });
                 (config, Some(match saved { Ok(()) => notice, Err(error) => format!("{notice} Não foi possível gravar a configuração: {error}") }))
             }
             Err(error) => (Self::default(), Some(set_aside(path, &error.to_string()))),
@@ -454,10 +449,10 @@ mod tests {
     fn etapas_de_recursos_removidos_saem_sem_perder_o_resto() {
         let dir = temporary_dir("removidos");
         let path = dir.join("config.json");
-        let old = r#"{"version":3,"settings":{"homeassistant":{"url":"http://ha"}},"macros":[{"layer":1,"slot":1,"mods":0,"code":104,"steps":[{"type":"homeassistant","service":"toggle","entity":"light.sala"},{"type":"delay","ms":10}]}],"mobile":{"buttons":[{"slot":2,"steps":[{"type":"midi","port":"x","channel":1,"control":7,"mode":"set","value":1}]}]}}"#;
+        let old = r#"{"version":3,"settings":{"homeassistant":{"url":"http://ha"}},"macros":[{"layer":1,"slot":1,"mods":0,"code":104,"steps":[{"type":"homeassistant","service":"toggle","entity":"light.sala"},{"type":"player","app":"","action":"playPause"},{"type":"delay","ms":10}]}],"mobile":{"buttons":[{"slot":2,"steps":[{"type":"midi","port":"x","channel":1,"control":7,"mode":"set","value":1}]}]}}"#;
         fs::write(&path, old).unwrap();
         let (config, warning) = Config::load(&path);
-        assert!(warning.unwrap().contains("2 etapas"));
+        assert!(warning.unwrap().contains("3 etapas"));
         assert_eq!(config.macros[0].steps, vec![Step::Delay { ms: 10 }]);
         assert!(config.mobile.buttons.is_empty());
         let saved = fs::read_to_string(&path).unwrap();

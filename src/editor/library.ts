@@ -60,7 +60,6 @@ const library: ActionGroup[] = [
   {
     title: 'Áudio', icon: 'music', color: '#2fd27f', app: true, items: [
       appItem('mic', 'Mudo do microfone', 'Em qualquer app de chamada', 'mic', audio('mic', 'toggle'), isAudio('mic')),
-      appItem('player', 'Player', 'Spotify, navegador e outros players', 'spotify', fresh('player')),
       appItem('media-key', 'Tecla de mídia', 'Para usar em multi-ações', 'next', fresh('media')),
       appItem('sound', 'Tocar som', 'Soundboard (MP3, WAV)', 'music', fresh('sound'))
     ]

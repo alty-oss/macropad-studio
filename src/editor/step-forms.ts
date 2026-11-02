@@ -3,7 +3,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import {
   audioActions, audioTargets, httpMethods, mediaKeys, mouseActions, obsActions, obsNeedsScene,
-  obsNeedsSource, playerActions, systemActions, voicemeeterModes, windowActions, type Step, type StepOf
+  obsNeedsSource, systemActions, voicemeeterModes, windowActions, type Step, type StepOf
 } from '../device/steps.ts';
 import { h, inputValue, type Child } from '../lib/dom.ts';
 import { icon, type IconName } from '../lib/icons.ts';
@@ -226,11 +226,6 @@ export function stepFields(step: Step, edit: EditStep): HTMLElement[] {
         step.mode === 'toggle' ? null : field('Valor', numberInput(step.value, { min: -100, max: 100, step: 0.5, integer: false }, value => edit({ value })))
       ].filter(Boolean) as HTMLElement[];
     }
-    case 'player':
-      return [
-        field('Ação', select(playerActions, step.action, action => edit({ action }))),
-        field('Player', textInput(step.app, 'Vazio: o que está tocando. Ou spotify, chrome…', app => edit({ app })))
-      ];
   }
 }
 

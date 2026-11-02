@@ -57,6 +57,18 @@ describe('conexão da página mobile', () => {
     expect(element('status').textContent).toBe('Conectado');
   });
 
+  test('estados dos botões chegam junto do estado e em mensagens próprias', () => {
+    const { sockets, element } = load();
+    sockets[0].readyState = 1;
+    const send = (message: unknown) => sockets[0].onmessage?.({ data: JSON.stringify(message) });
+    send({ type: 'state', state: { mobile: [], physical: [], folders: [] }, states: { 'm:0:1': { tone: 'live', icon: 'stop' } } });
+    send({ type: 'states', states: { 'm:0:1': { tone: 'warn', icon: 'stop' } } });
+    send({ type: 'states', states: {} });
+    // Mensagens de estado não derrubam a conexão nem mostram erro.
+    expect(element('status').textContent).toBe('Conectado');
+    expect(element('connection-detail').textContent).toBe('');
+  });
+
   test('reconexões não criam dois WebSockets', () => {
     const { sockets, timers } = load();
     sockets[0].close();

@@ -1,12 +1,13 @@
 // Cliente do obs-websocket v5, que vem com o OBS Studio 28 ou mais novo. Uma thread mantém a
-// conexão, reconecta quando o OBS abre ou fecha e acompanha gravação, transmissão e cena atual.
+// conexão, reconecta quando o OBS abre ou fecha e acompanha o estado (gravação, transmissão, cena,
+// câmera virtual, replay buffer, mudo e visibilidade das fontes) para os botões do celular.
 use crate::config::ObsSettings;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     io::ErrorKind,
     net::{TcpStream, ToSocketAddrs},
     path::{Path, PathBuf},
@@ -16,8 +17,8 @@ use std::{
 };
 use tungstenite::{Message, WebSocket};
 
-// Assinaturas de eventos: General (1), Scenes (4) e Outputs (64).
-const EVENTS: u32 = 1 | 4 | 64;
+// Assinaturas de eventos: General (1), Scenes (4), Inputs (8), Outputs (64) e SceneItems (128).
+const EVENTS: u32 = 1 | 4 | 8 | 64 | 128;
 const RETRY: Duration = Duration::from_secs(3);
 const REPLY_TIMEOUT: Duration = Duration::from_secs(4);
 
@@ -28,6 +29,39 @@ pub struct ObsStatus {
     pub streaming: bool,
     pub scene: String,
     pub error: String,
+    #[serde(skip)]
+    pub record_paused: bool,
+    #[serde(skip)]
+    pub virtualcam: bool,
+    #[serde(skip)]
+    pub replay_buffer: bool,
+    // Mudo de cada fonte de áudio, pelo nome.
+    #[serde(skip)]
+    pub mutes: BTreeMap<String, bool>,
+    // Itens de cada cena: (cena, fonte) → (id do item, visível).
+    #[serde(skip)]
+    pub items: BTreeMap<(String, String), (i64, bool)>,
+}
+
+impl ObsStatus {
+    // Visibilidade de uma fonte numa cena (vazia: a cena atual).
+    pub fn visible(&self, scene: &str, source: &str) -> Option<bool> {
+        let scene = if scene.trim().is_empty() { self.scene.as_str() } else { scene.trim() };
+        self.items.get(&(scene.to_string(), source.trim().to_string())).map(|&(_, enabled)| enabled)
+    }
+}
+
+// Pedidos feitos ao conectar e quando fontes ou cenas mudam; as respostas preenchem o estado.
+fn status_request(kind: &str, id: &str, data: Value) -> Value {
+    let mut request = json!({ "requestType": kind, "requestId": format!("status-{id}") });
+    if !data.is_null() { request["requestData"] = data; }
+    json!({ "op": 6, "d": request })
+}
+fn initial_requests() -> Vec<Value> {
+    ["GetRecordStatus", "GetStreamStatus", "GetCurrentProgramScene", "GetVirtualCamStatus", "GetReplayBufferStatus", "GetInputList", "GetSceneList"]
+        .into_iter()
+        .map(|kind| status_request(kind, kind, Value::Null))
+        .collect()
 }
 
 type Reply = mpsc::Sender<Result<Value, String>>;
@@ -273,8 +307,7 @@ fn run(obs: &'static Obs, queue: mpsc::Receiver<Command>, mut settings: ObsSetti
                         status.error.clear();
                     });
                     // Estado inicial: as respostas destes pedidos atualizam o status.
-                    for kind in ["GetRecordStatus", "GetStreamStatus", "GetCurrentProgramScene"] {
-                        let message = json!({ "op": 6, "d": { "requestType": kind, "requestId": format!("status-{kind}") } });
+                    for message in initial_requests() {
                         socket.as_mut().unwrap().send(Message::Text(message.to_string())).ok();
                     }
                 }
@@ -294,7 +327,10 @@ fn run(obs: &'static Obs, queue: mpsc::Receiver<Command>, mut settings: ObsSetti
         match open.read() {
             Ok(Message::Text(text)) => {
                 let Ok(message) = serde_json::from_str::<Value>(&text) else { continue };
-                handle_message(obs, &on_status, &mut pending, &message);
+                // Algumas respostas e eventos pedem mais dados (o mudo de cada fonte, os itens de cada cena).
+                for follow in handle_message(obs, &on_status, &mut pending, &message) {
+                    open.send(Message::Text(follow.to_string())).ok();
+                }
             }
             Ok(Message::Close(_)) => drop_connection(obs, &on_status, &mut socket, &mut pending, &mut next_try),
             Ok(_) => {}
@@ -313,20 +349,54 @@ fn drop_connection(obs: &Obs, on_status: &OnStatus, socket: &mut Option<Socket>,
     set_status(obs, on_status, |status| *status = ObsStatus { error: "OBS desconectado.".into(), ..ObsStatus::default() });
 }
 
-fn handle_message(obs: &Obs, on_status: &OnStatus, pending: &mut HashMap<String, Reply>, message: &Value) {
+fn handle_message(obs: &Obs, on_status: &OnStatus, pending: &mut HashMap<String, Reply>, message: &Value) -> Vec<Value> {
     let data = &message["d"];
+    let active = |value: &Value| value["outputActive"].as_bool().unwrap_or(false);
+    let text = |value: &Value| value.as_str().unwrap_or("").to_string();
+    let mut follow = Vec::new();
     match message["op"].as_u64() {
         // Resposta a um pedido.
         Some(7) => {
             let id = data["requestId"].as_str().unwrap_or("");
             let response = &data["responseData"];
             match id {
-                "status-GetRecordStatus" => set_status(obs, on_status, |s| s.recording = response["outputActive"].as_bool().unwrap_or(false)),
-                "status-GetStreamStatus" => set_status(obs, on_status, |s| s.streaming = response["outputActive"].as_bool().unwrap_or(false)),
+                "status-GetRecordStatus" => set_status(obs, on_status, |s| {
+                    s.recording = active(response);
+                    s.record_paused = response["outputPaused"].as_bool().unwrap_or(false);
+                }),
+                "status-GetStreamStatus" => set_status(obs, on_status, |s| s.streaming = active(response)),
+                "status-GetVirtualCamStatus" => set_status(obs, on_status, |s| s.virtualcam = active(response)),
+                "status-GetReplayBufferStatus" => set_status(obs, on_status, |s| s.replay_buffer = active(response)),
                 "status-GetCurrentProgramScene" => {
-                    let scene = response["currentProgramSceneName"].as_str().unwrap_or("").to_string();
+                    let scene = text(&response["currentProgramSceneName"]);
                     set_status(obs, on_status, |s| s.scene = scene);
                 }
+                "status-GetInputList" => {
+                    let inputs: Vec<String> = response["inputs"].as_array().into_iter().flatten().map(|input| text(&input["inputName"])).filter(|name| !name.is_empty()).collect();
+                    set_status(obs, on_status, |s| s.mutes.retain(|name, _| inputs.contains(name)));
+                    follow.extend(inputs.iter().map(|name| status_request("GetInputMute", &format!("mute:{name}"), json!({ "inputName": name }))));
+                }
+                "status-GetSceneList" => {
+                    let scenes: Vec<String> = response["scenes"].as_array().into_iter().flatten().map(|scene| text(&scene["sceneName"])).filter(|name| !name.is_empty()).collect();
+                    set_status(obs, on_status, |s| s.items.retain(|(scene, _), _| scenes.contains(scene)));
+                    follow.extend(scenes.iter().map(|scene| status_request("GetSceneItemList", &format!("items:{scene}"), json!({ "sceneName": scene }))));
+                }
+                _ if id.starts_with("status-mute:") => {
+                    let name = id["status-mute:".len()..].to_string();
+                    if let Some(muted) = response["inputMuted"].as_bool() { set_status(obs, on_status, |s| { s.mutes.insert(name, muted); }); }
+                }
+                _ if id.starts_with("status-items:") => {
+                    let scene = id["status-items:".len()..].to_string();
+                    let items: Vec<(String, i64, bool)> = response["sceneItems"].as_array().into_iter().flatten()
+                        .map(|item| (text(&item["sourceName"]), item["sceneItemId"].as_i64().unwrap_or(-1), item["sceneItemEnabled"].as_bool().unwrap_or(false)))
+                        .collect();
+                    set_status(obs, on_status, |s| {
+                        s.items.retain(|(item_scene, _), _| *item_scene != scene);
+                        for (source, id, enabled) in items { s.items.insert((scene.clone(), source), (id, enabled)); }
+                    });
+                }
+                // Respostas de pedidos de estado que falharam (replay buffer desligado, por exemplo).
+                _ if id.starts_with("status-") => {}
                 _ => {
                     if let Some(reply) = pending.remove(id) {
                         let status = &data["requestStatus"];
@@ -344,17 +414,45 @@ fn handle_message(obs: &Obs, on_status: &OnStatus, pending: &mut HashMap<String,
         Some(5) => {
             let event = &data["eventData"];
             match data["eventType"].as_str() {
-                Some("RecordStateChanged") => set_status(obs, on_status, |s| s.recording = event["outputActive"].as_bool().unwrap_or(false)),
-                Some("StreamStateChanged") => set_status(obs, on_status, |s| s.streaming = event["outputActive"].as_bool().unwrap_or(false)),
+                Some("RecordStateChanged") => set_status(obs, on_status, |s| {
+                    s.recording = active(event);
+                    match event["outputState"].as_str() {
+                        Some("OBS_WEBSOCKET_OUTPUT_PAUSED") => s.record_paused = true,
+                        Some("OBS_WEBSOCKET_OUTPUT_RESUMED") => s.record_paused = false,
+                        _ if !s.recording => s.record_paused = false,
+                        _ => {}
+                    }
+                }),
+                Some("StreamStateChanged") => set_status(obs, on_status, |s| s.streaming = active(event)),
+                Some("VirtualcamStateChanged") => set_status(obs, on_status, |s| s.virtualcam = active(event)),
+                Some("ReplayBufferStateChanged") => set_status(obs, on_status, |s| s.replay_buffer = active(event)),
                 Some("CurrentProgramSceneChanged") => {
-                    let scene = event["sceneName"].as_str().unwrap_or("").to_string();
+                    let scene = text(&event["sceneName"]);
                     set_status(obs, on_status, |s| s.scene = scene);
                 }
+                Some("InputMuteStateChanged") => {
+                    let name = text(&event["inputName"]);
+                    let muted = event["inputMuted"].as_bool().unwrap_or(false);
+                    set_status(obs, on_status, |s| { s.mutes.insert(name, muted); });
+                }
+                Some("SceneItemEnableStateChanged") => {
+                    let scene = text(&event["sceneName"]);
+                    let (id, enabled) = (event["sceneItemId"].as_i64().unwrap_or(-1), event["sceneItemEnabled"].as_bool().unwrap_or(false));
+                    set_status(obs, on_status, |s| {
+                        for ((item_scene, _), item) in s.items.iter_mut() {
+                            if *item_scene == scene && item.0 == id { item.1 = enabled; }
+                        }
+                    });
+                }
+                // Fontes ou cenas criadas, removidas ou renomeadas: lê as listas de novo.
+                Some("InputCreated" | "InputRemoved" | "InputNameChanged") => follow.push(status_request("GetInputList", "GetInputList", Value::Null)),
+                Some("SceneCreated" | "SceneRemoved" | "SceneNameChanged" | "SceneItemCreated" | "SceneItemRemoved") => follow.push(status_request("GetSceneList", "GetSceneList", Value::Null)),
                 _ => {}
             }
         }
         _ => {}
     }
+    follow
 }
 
 #[cfg(test)]

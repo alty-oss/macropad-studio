@@ -9,7 +9,7 @@ Configurador para Windows dos macropads CH57x (USB `1189:8840`, como o modelo de
 - **Gravado no aparelho**: atalhos de teclado e teclas de mídia funcionam em qualquer computador, mesmo sem o app.
 - **Ações do app** por teclas virtuais (F13–F24), com o app na bandeja:
   - **Sistema**: abrir programas, pastas e sites, digitar texto, comandos e scripts, janelas, energia, tema, mouse e brilho do monitor.
-  - **Áudio**: mudo do microfone, volume da saída e por programa, players (Spotify e outros), teclas de mídia e soundboard.
+  - **Áudio**: mudo do microfone, volume da saída e por programa, teclas de mídia e soundboard.
   - **OBS Studio**: cenas, gravação, transmissão, replay, fontes, volume e screenshot.
   - **Integrações**: requisições HTTP (webhooks) e Voicemeeter.
 - **Multi-ação**: várias etapas em sequência, alternar entre duas listas, tocar ou segurar e perfis por programa (a mesma tecla faz coisas diferentes conforme a janela em foco).
@@ -18,7 +18,8 @@ Configurador para Windows dos macropads CH57x (USB `1189:8840`, como o modelo de
 
 ### Celular
 - **Stream Deck no celular** pela rede Wi-Fi: escaneie o QR code ou abra o endereço, sem código.
-- **App instalável** no iPhone e no Android, em tela cheia e sem rolagem: 5 × 3 deitado, 3 × 5 em pé.
+- **App instalável** no iPhone e no Android, em tela cheia e sem rolagem, sempre deitado (5 × 3) em qualquer posição do celular.
+- **Botões com estado**: gravando no OBS o botão fica vermelho e vira "parar"; cena atual acende, microfone mudo aparece riscado, tocar/pausar acompanha a mídia e o contador mostra o valor.
 - **Pastas** com botão Voltar, para organizar quantos botões quiser.
 - **Visual personalizável**: cores, ícones (incluindo OBS, Twitch, YouTube, Discord e Spotify) e **imagens**, como logo ou cobrindo a tecla inteira.
 - Todas as ações do app funcionam no celular; volume, brilho e afins **repetem enquanto você segura** o botão.

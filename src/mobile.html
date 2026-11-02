@@ -24,26 +24,24 @@
     .ico { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; display: block; }
     .ico.brand { fill: currentColor; stroke: none; }
 
-    .app { position: absolute; inset: 0; display: flex; padding: calc(var(--safe-t) + 10px) calc(var(--safe-r) + 10px) calc(var(--safe-b) + 10px) calc(var(--safe-l) + 10px); background: radial-gradient(ellipse at 50% 40%, #0d0e12, #000 70%); }
-    .app.landscape { flex-direction: row; }
-    .app.portrait { flex-direction: column-reverse; }
+    /* Sempre deitado: com o celular em pé, o palco inteiro gira 90° (o lado de cima da página fica na
+       borda direita da tela). As margens seguras acompanham o giro. */
+    .stage { position: absolute; inset: 0; overflow: hidden; }
+    .stage.rotated { inset: auto; top: 0; left: 100%; transform-origin: 0 0; transform: rotate(90deg); --safe-t: env(safe-area-inset-right, 0px); --safe-r: env(safe-area-inset-bottom, 0px); --safe-b: env(safe-area-inset-left, 0px); --safe-l: env(safe-area-inset-top, 0px); }
+    .app { position: absolute; inset: 0; display: flex; flex-direction: row; padding: calc(var(--safe-t) + 10px) calc(var(--safe-r) + 10px) calc(var(--safe-b) + 10px) calc(var(--safe-l) + 10px); background: radial-gradient(ellipse at 50% 40%, #0d0e12, #000 70%); }
     .deck { position: relative; flex: 1; min-width: 0; min-height: 0; display: grid; place-items: center; }
-    .rail { flex: none; display: flex; align-items: center; gap: 10px; color: #8d919b; }
-    .landscape .rail { flex-direction: column; width: 46px; padding-top: 4px; }
-    .portrait .rail { flex-direction: row-reverse; height: 44px; padding: 0 2px; }
+    .rail { flex: none; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 46px; padding-top: 4px; color: #8d919b; }
     .rail-button { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; color: #a3a7b0; }
     .rail-button:active { background: #ffffff14; color: #fff; }
     .rail-button svg { width: 24px; height: 24px; }
     .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b6f78; }
     .status-dot.ok { background: #3ddc84; box-shadow: 0 0 8px #3ddc8488; }
     .status-dot.bad { background: #ff6b6b; box-shadow: 0 0 8px #ff6b6b88; }
-    .rail-title { flex: 1; min-width: 0; overflow: hidden; color: #c9ccd3; font-size: 14px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-    .landscape .rail-title { display: none; }
+    .rail-title { display: none; }
 
     /* Grade: --k (lado da tecla) e --g (vão) são calculados em layout(). */
     .grid { display: grid; gap: var(--g); grid-template-columns: repeat(var(--cols), var(--k)); grid-auto-rows: var(--k); }
     .physical { display: flex; gap: var(--sep); align-items: center; }
-    .portrait .physical { flex-direction: column; }
     .knob-row-title { display: none; }
 
     .key { position: relative; width: var(--k); height: var(--k); padding: calc(var(--k) * .065); border-radius: calc(var(--k) * .2); background: linear-gradient(180deg, #2b2c31, #0c0d10 60%, #18191d); box-shadow: inset 0 0 0 1px #3b3d44, inset 0 1px 0 #ffffff1c, 0 calc(var(--k) * .04) calc(var(--k) * .12) #000c; transition: transform 80ms, filter 80ms; touch-action: none; }
@@ -67,8 +65,17 @@
     .key.back .face { background: #1b1c21; color: #d6d9e0; }
     .key.folder .face { color: #fff; }
     .folder-mark { position: absolute; right: 9%; bottom: 9%; width: calc(var(--k) * .15); height: calc(var(--k) * .15); opacity: .7; }
-    .key.pressed, .key:active:not(.empty) { transform: scale(.93); filter: brightness(1.3); }
+    .key.pressed { transform: scale(.93); filter: brightness(1.3); }
     .key.knob .glyph { width: calc(var(--k) * .34); height: calc(var(--k) * .34); }
+    /* Estados: gravando/ao vivo (vermelho pulsando), ativo (azul), pausado (âmbar), mudo (ícone
+       vermelho) e indisponível (apagado). */
+    .key.tone-live { box-shadow: inset 0 0 0 1px #3b3d44, 0 0 0 2px #ff3b3b, 0 0 calc(var(--k) * .35) #ff3b3b99; animation: live 1.6s ease-in-out infinite; }
+    .key.tone-live::after { content: ""; position: absolute; top: 11%; right: 11%; width: calc(var(--k) * .09); height: calc(var(--k) * .09); border-radius: 50%; background: #ff3b3b; box-shadow: 0 0 6px #ff3b3b; }
+    .key.tone-on { box-shadow: inset 0 0 0 1px #3b3d44, 0 0 0 2px #4b8dff, 0 0 calc(var(--k) * .3) #4b8dff88; }
+    .key.tone-warn { box-shadow: inset 0 0 0 1px #3b3d44, 0 0 0 2px #f5b83d, 0 0 calc(var(--k) * .3) #f5b83d77; }
+    .key.tone-muted .glyph { color: #ff6b6b; }
+    .key.tone-off { opacity: .45; }
+    @keyframes live { 50% { box-shadow: inset 0 0 0 1px #3b3d44, 0 0 0 2px #ff3b3b, 0 0 calc(var(--k) * .12) #ff3b3b44; } }
     .glyph img { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
     .key.cover .face { justify-content: flex-end; padding-bottom: 9%; background-color: #0b0b0d; background-position: center; background-size: cover; background-repeat: no-repeat; }
     .key.cover .label { padding: 1px 6px; border-radius: 6px; background: #0008; }
@@ -106,7 +113,8 @@
   </style>
 </head>
 <body>
-  <div id="app" class="app landscape">
+  <div id="stage" class="stage">
+  <div id="app" class="app">
     <main id="deck" class="deck" aria-label="Botões"></main>
     <aside class="rail">
       <button id="menu-button" class="rail-button" type="button" aria-label="Configurações"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
@@ -122,7 +130,7 @@
       <div class="row"><span>Página</span><div class="seg"><button id="view-mobile" type="button" class="active">Celular</button><button id="view-physical" type="button">Macropad</button></div></div>
       <div id="layer-row" class="row" hidden><span>Camada</span><div id="layers" class="seg"></div></div>
       <div class="actions"><button id="install-button" class="action primary" type="button">Instalar app</button><button id="fullscreen" class="action" type="button">Tela cheia</button></div>
-      <p id="view-hint" class="hint">Esta página é exclusiva do celular e não altera o firmware. Gire o celular para trocar entre 5 × 3 e 3 × 5.</p>
+      <p id="view-hint" class="hint">Esta página é exclusiva do celular e não altera o firmware.</p>
     </div>
   </div>
 
@@ -131,11 +139,12 @@
     <div><strong>Instalar como app</strong><p id="install-text"></p></div>
     <div class="install-actions"><button id="install-go" class="install-go" type="button">Instalar</button><button id="install-close" class="install-close" type="button" aria-label="Agora não">×</button></div>
   </div>
+  </div>
   <script>
     (() => {
       const ICONS = {/*ICONS*/};
       const $ = (id) => document.getElementById(id);
-      const state = { data: null, view: 'mobile', page: 0, stack: [], layer: 1, layerChosen: false, socket: null, reconnectTimer: null, pingTimer: null };
+      const state = { data: null, states: {}, view: 'mobile', page: 0, stack: [], layer: 1, layerChosen: false, socket: null, reconnectTimer: null, pingTimer: null };
       const viewKey = 'macropad-mobile-view', installKey = 'macropad-install-dismissed';
       const browser = typeof window !== 'undefined';
       const held = new Set();
@@ -160,15 +169,23 @@
 
       function makeKey(slot, source, extra = {}) {
         const button = document.createElement('button');
-        const glyphName = slot.icon || extra.glyph || (slot.kind === 'back' ? 'back' : slot.kind === 'folder' ? 'folder' : slot.kind === 'hid' ? 'keyboard' : slot.kind === 'app' ? 'bolt' : '');
-        const label = slot.kind === 'back' ? 'Voltar' : slot.label || extra.label || '';
+        // Estado do botão calculado pelo computador (gravando, mudo, cena atual…): troca o ícone,
+        // acende a tecla e pode acrescentar um valor à legenda, como o número de um contador.
+        const stateKey = source === 'mobile' ? `m:${state.page}:${slot.slot}` : `p:${state.layer}:${slot.slot}`;
+        const live = slot.executable ? state.states[stateKey] || {} : {};
+        // Logotipos escolhidos (Spotify, OBS…) ficam; os ícones comuns trocam pelo do estado.
+        const brand = Boolean(slot.icon && (ICONS.brand || {})[slot.icon]);
+        const glyphName = (brand ? '' : live.icon) || slot.icon || extra.glyph || (slot.kind === 'back' ? 'back' : slot.kind === 'folder' ? 'folder' : slot.kind === 'hid' ? 'keyboard' : slot.kind === 'app' ? 'bolt' : '');
+        const baseLabel = slot.kind === 'back' ? 'Voltar' : slot.label || extra.label || '';
+        const label = live.label ? (baseLabel ? `${baseLabel} ${live.label}` : live.label) : baseLabel;
         // Imagem do botão: "cover" ocupa a tampa inteira; "icon" fica no lugar do ícone.
         const cover = Boolean(slot.image) && slot.fit === 'cover' && slot.kind !== 'empty';
         const picture = Boolean(slot.image) && !cover && slot.kind !== 'empty';
         const glyph = slot.kind === 'empty' || cover ? '' : picture ? `<img src="${slot.image}" alt="" draggable="false">` : svg(glyphName);
         button.type = 'button';
-        button.className = `key ${slot.kind}${cover ? ' cover' : ''}${slot.kind === 'hid' && !slot.executable ? ' locked' : ''}${slot.color && slot.kind !== 'empty' ? ' colored' : ''}${glyph ? ' has-glyph' : ''}${glyph && label ? ' labelled' : ''}${extra.className ? ` ${extra.className}` : ''}`;
+        button.className = `key ${slot.kind}${cover ? ' cover' : ''}${slot.kind === 'hid' && !slot.executable ? ' locked' : ''}${slot.color && slot.kind !== 'empty' ? ' colored' : ''}${glyph ? ' has-glyph' : ''}${glyph && label ? ' labelled' : ''}${live.tone ? ` tone-${live.tone}` : ''}${extra.className ? ` ${extra.className}` : ''}`;
         button.dataset.slot = slot.slot; button.dataset.source = source;
+        if (slot.executable) { button.dataset.stateKey = stateKey; button.rebuild = () => makeKey(slot, source, extra); }
         if (source === 'mobile') button.dataset.page = state.page;
         if (slot.color) button.style.setProperty('--c', slot.color);
         button.setAttribute('aria-label', label || (slot.kind === 'empty' ? 'Vazio' : `Botão ${slot.slot}`));
@@ -186,15 +203,18 @@
         const message = (down) => source === 'mobile' ? { type: 'trigger', source, page, layer: null, slot: slot.slot, down } : { type: 'trigger', source, layer, slot: slot.slot, down };
         // Ações incrementais e giros de knob repetem enquanto o dedo fica no botão, como girar o knob.
         let repeatTimer = null;
-        const tick = (delay) => { repeatTimer = setTimeout(() => { send(message(true)); send(message(false)); tick(110); }, delay); };
+        const tick = (delay) => { repeatTimer = setTimeout(() => { button.dataset.touchedAt = String(Date.now()); send(message(true)); send(message(false)); tick(110); }, delay); };
         const release = () => {
           if (!held.delete(release)) return;
           button.classList.remove('pressed');
           if (repeatTimer !== null) { clearTimeout(repeatTimer); repeatTimer = null; }
           if (!slot.repeat) send(message(false));
+          // O estado mudou enquanto o dedo estava no botão: redesenha agora que ele foi solto.
+          if (button.dataset.stale && button.isConnected) button.replaceWith(button.rebuild());
         };
         const down = (event) => {
           event.preventDefault(); button.classList.add('pressed'); button.setPointerCapture?.(event.pointerId);
+          button.dataset.touchedAt = String(Date.now());
           held.add(release);
           send(message(true));
           if (slot.repeat) { send(message(false)); tick(380); }
@@ -215,25 +235,22 @@
       }
       function grid(cols, children) { const element = document.createElement('div'); element.className = 'grid'; element.style.setProperty('--cols', cols); element.append(...children); return element; }
 
-      function renderMobile(landscape) {
+      function renderMobile() {
         const slots = new Map(currentSlots().map(slot => [slot.slot, slot]));
-        const cols = landscape ? 5 : 3;
-        fit(cols, landscape ? 3 : 5);
+        fit(5, 3);
         const keys = Array.from({ length: 15 }, (_, index) => makeKey(slots.get(index + 1) || { slot: index + 1, kind: state.page && index === 0 ? 'back' : 'empty' }, 'mobile'));
-        $('deck').replaceChildren(grid(cols, keys));
+        $('deck').replaceChildren(grid(5, keys));
         $('title').textContent = state.page ? folderById(state.page)?.name || 'Pasta' : 'Celular';
       }
 
-      // Espelho do macropad: deitado como no editor (slots 1–12 em ordem de leitura); em pé como o
-      // aparelho (linha de cima 4/8/12, de baixo 1/5/9). Os knobs ficam ao lado ou embaixo.
-      function renderPhysical(landscape) {
+      // Espelho do macropad, deitado como no editor: slots 1–12 em ordem de leitura e os knobs ao lado.
+      function renderPhysical() {
         const layers = state.data?.state?.physical || [];
         const layer = layers.find(item => item.layer === state.layer) || { slots: [] };
         const slots = new Map((layer.slots || []).map(item => [item.slot, item]));
         const at = (number, fallback = {}) => slots.get(number) || { slot: number, kind: 'empty', ...fallback };
-        const order = landscape ? Array.from({ length: 12 }, (_, i) => i + 1) : Array.from({ length: 12 }, (_, i) => (i % 3) * 4 + (4 - Math.floor(i / 3)));
-        landscape ? fit(7, 3, 1, 0) : fit(3, 7, 0, 1);
-        const keys = grid(landscape ? 4 : 3, order.map(number => makeKey(at(number), 'physical')));
+        fit(7, 3, 1, 0);
+        const keys = grid(4, Array.from({ length: 12 }, (_, i) => makeKey(at(i + 1), 'physical')));
         const parts = [['rotateLeft', 'Esquerda'], ['press', 'Pressionar'], ['rotateRight', 'Direita']];
         const knobs = grid(3, [0, 1, 2].flatMap(knob => parts.map(([glyph], part) => makeKey(at(16 + knob * 3 + part), 'physical', { glyph, className: 'knob', label: part === 1 ? `Knob ${knob + 1}` : '' }))));
         const wrap = document.createElement('div'); wrap.className = 'physical'; wrap.append(keys, knobs);
@@ -246,7 +263,7 @@
         $('view-physical').className = state.view === 'physical' ? 'active' : '';
         $('layer-row').hidden = state.view !== 'physical';
         $('view-hint').textContent = state.view === 'mobile'
-          ? 'Esta página é exclusiva do celular e não altera o firmware. Gire o celular para trocar entre 5 × 3 e 3 × 5.'
+          ? 'Esta página é exclusiva do celular e não altera o firmware.'
           : 'Atalhos e mídia gravados no aparelho também funcionam daqui, executados pelo app. Segure um giro de knob para repetir. Botões apagados têm ações que só o macropad entende.';
         $('layers').replaceChildren(...[1, 2, 3].map(number => {
           const button = document.createElement('button'); button.type = 'button'; button.textContent = String(number);
@@ -259,12 +276,23 @@
       // Botões segurados: soltos antes de redesenhar a grade ou quando o celular sai do app, para que
       // nenhuma repetição continue sem o dedo na tela.
       function releaseAll() { [...held].forEach(release => release()); }
+      // Com o celular em pé, gira o palco para a página continuar deitada.
+      function orient() {
+        if (!browser) return;
+        const stage = $('stage'), width = window.innerWidth, height = window.innerHeight;
+        const rotated = width < height;
+        stage.classList.toggle('rotated', rotated);
+        stage.style.width = rotated ? `${height}px` : '';
+        stage.style.height = rotated ? `${width}px` : '';
+      }
+      // Onde o navegador deixa (app instalado no Android ou em tela cheia), trava a tela deitada.
+      function lockLandscape() { if (browser) screen.orientation?.lock?.('landscape').catch(() => {}); }
       function render() {
-        if (!state.data || !browser) return;
+        if (!browser) return;
+        orient();
+        if (!state.data) return;
         releaseAll();
-        const landscape = window.innerWidth >= window.innerHeight;
-        $('app').className = `app ${landscape ? 'landscape' : 'portrait'}`;
-        if (state.view === 'physical') renderPhysical(landscape); else renderMobile(landscape);
+        if (state.view === 'physical') renderPhysical(); else renderMobile();
         renderSheet();
       }
       function setView(view) { state.view = view; try { localStorage.setItem(viewKey, view); } catch {} render(); }
@@ -274,16 +302,34 @@
         if (state.reconnectTimer !== null) return;
         state.reconnectTimer = setTimeout(() => { state.reconnectTimer = null; connect(); }, 2000);
       }
+      // Novos estados: redesenha só as teclas que mudaram, sem tocar nas que estão sendo seguradas.
+      function applyStates(next) {
+        const previous = state.states;
+        state.states = next || {};
+        if (!browser) return;
+        document.querySelectorAll('[data-state-key]').forEach(element => {
+          const key = element.dataset.stateKey;
+          if (JSON.stringify(previous[key]) === JSON.stringify(state.states[key])) return;
+          if (element.classList.contains('pressed')) { element.dataset.stale = '1'; return; }
+          element.replaceWith(element.rebuild());
+        });
+      }
       function flash(message) {
         const source = message.source || 'physical';
         const selector = source === 'mobile' ? `[data-source="mobile"][data-page="${message.page || 0}"][data-slot="${message.slot}"]` : `[data-source="physical"][data-slot="${message.slot}"]`;
         if (source === 'physical' && message.layer && message.layer !== state.layer) return;
         const target = document.querySelector(selector);
-        if (target && message.down) { target.classList.add('pressed'); setTimeout(() => target.classList.remove('pressed'), 220); }
+        // O aviso também chega para as teclas tocadas aqui, logo depois do toque: animar de novo
+        // parecia um segundo aperto. Só anima o que veio de outro lugar (o macropad físico).
+        if (!target || !message.down || target.classList.contains('pressed')) return;
+        if (Date.now() - Number(target.dataset.touchedAt || 0) < 1000) return;
+        target.classList.add('pressed');
+        setTimeout(() => target.classList.remove('pressed'), 220);
       }
       function connect() {
         if (state.socket && state.socket.readyState <= WebSocket.OPEN) return;
         if (state.reconnectTimer !== null) { clearTimeout(state.reconnectTimer); state.reconnectTimer = null; }
+        state.replaced = false;
         const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
         let socket;
         try { socket = new WebSocket(url); }
@@ -294,13 +340,26 @@
         socket.onmessage = (event) => {
           if (state.socket !== socket) return;
           let message; try { message = JSON.parse(event.data); } catch { return; }
+          state.lastSeen = Date.now();
           if (message.type === 'state') {
             state.data = message;
+            state.states = message.states || {};
             if (!state.layerChosen) state.layer = message.state?.detectedLayer || 1;
             render(); setStatus('Conectado', 'ok'); setConnectionDetail('');
+            // Sinal de vida: sem resposta do computador por 25 s, a conexão morreu sem avisar
+            // (comum quando o celular suspende o app) e é refeita.
             if (state.pingTimer === null) state.pingTimer = setInterval(() => {
-              if (state.socket === socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping' }));
-            }, 15000);
+              if (state.socket !== socket) return;
+              if (Date.now() - state.lastSeen > 25000) { reconnectNow(); return; }
+              send({ type: 'ping' });
+            }, 10000);
+          } else if (message.type === 'replaced') {
+            // Outro aparelho conectou, ou o computador desconectou este: não volta sozinho.
+            state.replaced = true;
+            setStatus('Desconectado', 'bad');
+            setConnectionDetail('Conectado em outro aparelho ou desconectado pelo computador. Toque aqui para reconectar.');
+          } else if (message.type === 'states') {
+            applyStates(message.states);
           } else if (message.type === 'fired') {
             flash(message);
           } else if (message.type === 'error') {
@@ -312,10 +371,30 @@
           if (state.socket !== socket) return;
           state.socket = null;
           if (state.pingTimer !== null) { clearInterval(state.pingTimer); state.pingTimer = null; }
+          if (state.replaced) return;
           if ($('connection-detail').hidden) setConnectionDetail(event.reason || `Conexão interrompida (${event.code}). Tentando novamente…`);
           setStatus('Reconectando…', 'bad'); reconnectLater();
         };
       }
+      // Larga a conexão atual (mesmo que ela pareça aberta) e conecta de novo na hora.
+      function reconnectNow() {
+        const old = state.socket;
+        state.socket = null;
+        if (state.pingTimer !== null) { clearInterval(state.pingTimer); state.pingTimer = null; }
+        try { old?.close(); } catch {}
+        connect();
+      }
+      // Ao voltar para o app: pede o estado atual e, se a conexão não responder logo, refaz.
+      let resyncTimer = null;
+      function resync() {
+        if (state.replaced) return;
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) { reconnectNow(); return; }
+        const asked = Date.now();
+        send({ type: 'sync' });
+        if (resyncTimer !== null) clearTimeout(resyncTimer);
+        resyncTimer = setTimeout(() => { resyncTimer = null; if ((state.lastSeen || 0) < asked) reconnectNow(); }, 2500);
+      }
+      $('connection-detail').onclick = () => { if (state.replaced) { setConnectionDetail(''); reconnectNow(); } };
       // Instalar como app. O Chrome do Android oferece o próprio convite (beforeinstallprompt) quando a
       // página pode ser instalada; no iPhone, e quando o convite não vem, mostramos o passo a passo.
       let installPrompt = null;
@@ -362,14 +441,21 @@
         // O service worker só é aceito em HTTPS ou em endereços liberados como seguros no navegador.
         if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
         $('fullscreen').hidden = !root.requestFullscreen;
-        $('fullscreen').onclick = () => { (document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen({ navigationUI: 'hide' })).catch(() => {}); $('sheet').hidden = true; };
+        $('fullscreen').onclick = () => {
+          (document.fullscreenElement ? document.exitFullscreen() : root.requestFullscreen({ navigationUI: 'hide' }).then(lockLandscape)).catch(() => {});
+          $('sheet').hidden = true;
+        };
+        if (installed()) lockLandscape();
+        orient();
         // Recalcula a grade ao girar ou redimensionar, e bloqueia o menu de toque longo nos botões.
         let frame = 0;
         const relayout = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(render); };
         window.addEventListener('resize', relayout);
         window.addEventListener('orientationchange', () => setTimeout(relayout, 120));
         document.addEventListener('contextmenu', event => event.preventDefault());
-        document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
+        document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); else resync(); });
+        window.addEventListener('pageshow', resync);
+        window.addEventListener('online', resync);
         window.addEventListener('blur', releaseAll);
       }
       connect();

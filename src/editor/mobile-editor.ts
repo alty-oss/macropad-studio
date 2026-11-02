@@ -12,7 +12,6 @@ import { appSuggestions, field, note, stepFields, type EditStep } from './step-f
 import { state, tauri } from './state.ts';
 
 export const MOBILE_COLORS = ['#2f6bff', '#1b3fd6', '#8e5cff', '#ff4fa3', '#ff5a4f', '#ff9a2e', '#f5c400', '#2fd27f', '#1de9b6', '#18c3ff', '#5b6170'];
-const ORIENTATION_KEY = 'mobile-preview-portrait';
 const MOBILE_DRAG = 'mobile:';
 
 let data: MobilePage = { buttons: [], folders: [] };
@@ -21,7 +20,6 @@ let path: number[] = [];
 let selected = 1;
 let dirty = false;
 let loaded = false;
-let portrait = (() => { try { return localStorage.getItem(ORIENTATION_KEY) === '1'; } catch { return false; } })();
 
 const pageId = () => path.at(-1) ?? 0;
 const folderById = (id: number) => data.folders.find(folder => folder.id === id);
@@ -163,7 +161,6 @@ const imageFile = (transfer: DataTransfer | null) => [...transfer?.files ?? []].
 
 function renderGrid() {
   const grid = $('#mobile-editor-grid');
-  grid.classList.toggle('portrait', portrait);
   grid.replaceChildren(...Array.from({ length: 15 }, (_, index) => {
     const slot = index + 1, button = buttonAt(slot), back = isBack(slot);
     const element = h('button', {
@@ -205,7 +202,6 @@ function renderBreadcrumb() {
   $('#mobile-breadcrumb').replaceChildren(...crumbs);
   const count = pageButtons().filter(used).length;
   $('#mobile-page-info').textContent = `${path.length ? 'Pasta' : 'Página principal'} · ${count} de ${path.length ? 14 : 15} botões configurados · ${data.folders.length} ${data.folders.length === 1 ? 'pasta' : 'pastas'}`;
-  for (const button of document.querySelectorAll<HTMLButtonElement>('#mobile-orientation button')) button.setAttribute('aria-checked', String((button.dataset.orientation === 'portrait') === portrait));
 }
 
 function render() {
@@ -243,7 +239,7 @@ async function testButton(button: MobileButton) {
   catch (failure) { toast(errorText(failure), 'error'); }
 }
 
-const STEP_TYPES: StepType[] = ['open', 'website', 'text', 'hotkey', 'delay', 'media', 'command', 'audio', 'window', 'system', 'mouse', 'brightness', 'sound', 'obs', 'voicemeeter', 'player', 'http', 'counter'];
+const STEP_TYPES: StepType[] = ['open', 'website', 'text', 'hotkey', 'delay', 'media', 'command', 'audio', 'window', 'system', 'mouse', 'brightness', 'sound', 'obs', 'voicemeeter', 'http', 'counter'];
 
 // Lista compacta de etapas: cabeçalho de uma linha com as ferramentas e os campos logo abaixo.
 function stepList(list: Step[], changed: (list: Step[], rerender?: boolean) => void): Child[] {
@@ -336,6 +332,38 @@ function imageControl(button: MobileButton) {
     h('button', { type: 'button', class: 'btn-link', onclick: () => update(next => { next.image = ''; next.fit = ''; }) }, 'Remover'));
 }
 
+// Como o botão muda no celular conforme o estado (src-tauri/src/states.rs), para o usuário saber o que esperar.
+const OBS_HINTS: Record<string, string> = {
+  record: 'Enquanto grava, o botão fica vermelho e vira "parar"; pausado, fica âmbar.',
+  recordStart: 'Fica vermelho enquanto o OBS grava.',
+  recordStop: 'Fica apagado quando o OBS não está gravando.',
+  recordPause: 'Mostra pausar ou retomar conforme a gravação; apagado sem gravação.',
+  chapter: 'Fica apagado quando o OBS não está gravando.',
+  stream: 'Ao vivo, o botão fica vermelho e vira "parar".',
+  streamStart: 'Fica vermelho enquanto a transmissão está no ar.',
+  streamStop: 'Fica apagado quando não há transmissão.',
+  virtualcam: 'Acende enquanto a câmera virtual está ligada.',
+  replay: 'Fica apagado quando o replay buffer está desligado.',
+  scene: 'Acende quando esta é a cena atual.',
+  mute: 'Mostra o microfone riscado quando a fonte está muda.',
+  visibility: 'Mostra o olho riscado quando a fonte está escondida.'
+};
+function stateHint(button: MobileButton): string | null {
+  const prefix = 'No celular: ';
+  if (button.mode === 'toggle') return `${prefix}acende com o ícone da segunda ação enquanto ela é a próxima a executar.`;
+  const [step] = button.steps;
+  if (!step) return null;
+  switch (step.type) {
+    case 'obs': return OBS_HINTS[step.action] ? `${prefix}${OBS_HINTS[step.action]} Com o OBS fechado, fica apagado.` : null;
+    case 'audio': return step.action === 'up' || step.action === 'down' ? null : `${prefix}mostra o ícone riscado em vermelho quando ${step.target === 'mic' ? 'o microfone' : step.target === 'app' ? 'o programa' : 'o som'} está mudo.`;
+    case 'media': return step.key === 'playPause' ? `${prefix}mostra tocar ou pausar conforme o player atual.` : null;
+    case 'system': return step.action === 'theme' ? `${prefix}mostra sol ou lua conforme o tema do Windows.` : null;
+    case 'counter': return `${prefix}mostra o valor atual do contador na legenda.`;
+    case 'voicemeeter': return step.mode === 'toggle' ? `${prefix}acende quando o parâmetro está ligado.` : null;
+    default: return null;
+  }
+}
+
 function renderInspector() {
   const body = $('#mobile-editor-inspector'), button = buttonAt(selected);
   if (!used(button)) {
@@ -347,6 +375,7 @@ function renderInspector() {
   body.replaceChildren(h('div', { class: 'mi-layout' },
     h('div', { class: 'mi-main' }, ...actionEditor(button),
       button.mode === 'normal' && button.steps.some(isRotaryOnlyStep) ? note('Ação incremental: no celular, segure o botão para repetir, como girar um knob.') : null,
+      stateHint(button) ? note(stateHint(button)!) : null,
       error ? note(error, 'warning') : null),
     h('div', { class: 'mi-side' }, appearance(button))));
 }
@@ -381,11 +410,6 @@ export function bindMobileEditor() {
     if (invalid) { toast(invalid, 'error'); return; }
     try { await invoke('mobile_page_save', { page: data }); dirty = false; render(); toast('Página do celular salva.', 'success'); }
     catch (error) { toast(errorText(error), 'error'); }
-  });
-  for (const button of document.querySelectorAll<HTMLButtonElement>('#mobile-orientation button')) button.addEventListener('click', () => {
-    portrait = button.dataset.orientation === 'portrait';
-    try { localStorage.setItem(ORIENTATION_KEY, portrait ? '1' : '0'); } catch { /* sem armazenamento */ }
-    renderBreadcrumb(); renderGrid();
   });
   document.addEventListener('mobile-assign-action', event => {
     if (state.editorMode !== 'mobile') return;

@@ -19,7 +19,6 @@ export const obsActions = [
   ['transition', 'Transição (Studio Mode)'], ['chapter', 'Marcador na gravação']
 ] as const;
 export const voicemeeterModes = [['set', 'Definir o valor'], ['add', 'Somar ao valor atual'], ['toggle', 'Alternar 0 / 1']] as const;
-export const playerActions = [['playPause', 'Tocar / pausar'], ['next', 'Próxima'], ['prev', 'Anterior'], ['stop', 'Parar']] as const;
 
 type Value<T extends Options<string>> = T[number][0];
 export type MediaKey = Value<typeof mediaKeys>;
@@ -43,14 +42,13 @@ export type Step =
   | { type: 'brightness'; change: number }
   | { type: 'obs'; action: ObsAction; scene: string; source: string; amount: number; path?: string }
   | { type: 'voicemeeter'; parameter: string; mode: Value<typeof voicemeeterModes>; value: number }
-  | { type: 'player'; app: string; action: Value<typeof playerActions> };
 export type StepType = Step['type'];
 export type StepOf<T extends StepType> = Extract<Step, { type: T }>;
 
 export const stepNames: Record<StepType, string> = {
   open: 'Abrir', website: 'Site', text: 'Digitar texto', hotkey: 'Atalho', delay: 'Aguardar', media: 'Mídia', command: 'Comando',
   http: 'Requisição HTTP', audio: 'Áudio', window: 'Janela', system: 'Sistema', mouse: 'Mouse', sound: 'Tocar som', counter: 'Contador',
-  brightness: 'Brilho', obs: 'OBS', voicemeeter: 'Voicemeeter', player: 'Player'
+  brightness: 'Brilho', obs: 'OBS', voicemeeter: 'Voicemeeter'
 };
 
 export function newStep(type: StepType): Step {
@@ -72,7 +70,6 @@ export function newStep(type: StepType): Step {
     case 'brightness': return { type, change: 10 };
     case 'obs': return { type, action: 'record', scene: '', source: '', amount: 2, path: '' };
     case 'voicemeeter': return { type, parameter: 'Strip[0].Gain', mode: 'add', value: 2 };
-    case 'player': return { type, app: '', action: 'playPause' };
   }
 }
 
@@ -113,7 +110,6 @@ export function stepSummary(step: Step): string {
       return label(obsActions, step.action);
     }
     case 'voicemeeter': return `${step.parameter} · ${step.mode === 'toggle' ? 'alternar' : step.mode === 'add' ? signed(step.value) : step.value}`;
-    case 'player': return `${label(playerActions, step.action)}${step.app ? ` · ${step.app}` : ''}`;
   }
 }
 
@@ -178,7 +174,6 @@ export function parseStep(value: unknown): Step | null {
       const mode = option(voicemeeterModes, value.mode);
       return mode && typeof value.parameter === 'string' ? { type: 'voicemeeter', parameter: value.parameter, mode, value: number(value.value, -100, 100, 0) } : null;
     }
-    case 'player': { const action = option(playerActions, value.action); return action ? { type: 'player', action, app: text(value.app) } : null; }
     default: return null;
   }
 }

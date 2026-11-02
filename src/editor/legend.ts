@@ -38,7 +38,6 @@ export function stepIcon(step: Step): IconName {
     case 'brightness': return 'sun';
     case 'obs': return obsIcons[step.action] ?? 'obs';
     case 'voicemeeter': return 'mixer';
-    case 'player': return step.action === 'next' ? 'next' : step.action === 'prev' ? 'prev' : step.action === 'stop' ? 'stop' : 'playPause';
   }
 }
 
@@ -92,7 +91,6 @@ function shortName(step: Step): string {
     case 'brightness': return `${step.change > 0 ? '+' : ''}${step.change}%`;
     case 'obs': return step.action === 'scene' ? step.scene || 'Cena' : obsShort[step.action] ?? (step.source || 'OBS');
     case 'voicemeeter': return 'VM';
-    case 'player': return withoutExtension(step.app) || 'Player';
     default: return stepNames[step.type];
   }
 }

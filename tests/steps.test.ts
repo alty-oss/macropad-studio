@@ -17,7 +17,7 @@ describe('etapas do app', () => {
   test('etapas sem o dado principal não podem ser gravadas', () => {
     const incomplete: StepType[] = ['open', 'website', 'text', 'hotkey', 'command', 'http', 'sound', 'counter'];
     for (const type of incomplete) expect(stepError(newStep(type))).not.toBeNull();
-    for (const type of ['delay', 'media', 'window', 'system', 'mouse', 'brightness', 'player', 'voicemeeter'] as StepType[]) expect(stepError(newStep(type))).toBeNull();
+    for (const type of ['delay', 'media', 'window', 'system', 'mouse', 'brightness', 'voicemeeter'] as StepType[]) expect(stepError(newStep(type))).toBeNull();
     expect(stepError({ type: 'audio', target: 'app', app: '', action: 'up', amount: 5 })).toMatch(/programa/);
     expect(stepError({ type: 'obs', action: 'scene', scene: '', source: '', amount: 0 })).toMatch(/cena/);
     expect(stepError({ type: 'obs', action: 'volume', scene: '', source: 'Mic', amount: 2 })).toBeNull();
@@ -33,6 +33,7 @@ describe('etapas do app', () => {
     // Recursos que saíram do app: arquivos antigos são importados sem essas etapas.
     expect(parseStep({ type: 'midi', port: 'loopMIDI', mode: 'add', channel: 1, control: 7, value: 2 })).toBeNull();
     expect(parseStep({ type: 'homeassistant', service: 'toggle', entity: 'light.sala' })).toBeNull();
+    expect(parseStep({ type: 'player', app: 'spotify', action: 'playPause' })).toBeNull();
   });
 });
 

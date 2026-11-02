@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5
+
+### Celular
+- **Botões com estado**: o ícone e o destaque mudam com o que está acontecendo. OBS (gravação e transmissão viram "parar", pausa, cena atual, fonte muda ou escondida, câmera virtual, replay buffer e OBS fechado), mudo do microfone, do som e de programas, mídia tocando (tecla tocar/pausar), tema do Windows, valor de contadores, Voicemeeter e a segunda ação das multi-ações no modo alternar.
+- Sempre deitado (5 × 3), mesmo com o celular em pé: a página gira sozinha, e o app instalado no Android abre travado em paisagem.
+- O celular volta atualizado depois de ficar em segundo plano ou com a tela apagada: uma conexão nova substitui a anterior em vez de ser recusada, e conexões mortas são refeitas sozinhas.
+- Um toque não anima mais a tecla duas vezes.
+
+### Removido
+- Player. Etapas desse tipo em configurações antigas são descartadas ao abrir o app, com um aviso, sem perder o resto.
+
 ## 0.4
 
 ### Celular

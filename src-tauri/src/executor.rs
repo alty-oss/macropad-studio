@@ -8,13 +8,13 @@ use crate::{
     virtual_keys::held_modifiers,
 };
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     mem::size_of,
     os::windows::process::CommandExt,
     ptr::{null, null_mut},
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc, Arc,
+        mpsc, Arc, Mutex,
     },
     thread,
     time::{Duration, Instant},
@@ -118,6 +118,13 @@ fn resolve(item: &Macro) -> Vec<Step> {
     item.steps.clone()
 }
 
+// Teclas no modo "alternar" que estão na segunda lista, para o celular mostrar o estado.
+static TOGGLED: Mutex<BTreeSet<(u8, u8)>> = Mutex::new(BTreeSet::new());
+
+pub fn toggled(layer: u8, slot: u8) -> bool {
+    TOGGLED.lock().unwrap().contains(&(layer, slot))
+}
+
 fn slot_worker(host: &dyn Host, layer: u8, slot: u8, events: mpsc::Receiver<bool>) {
     init_thread();
     let mut toggled = false;
@@ -145,6 +152,9 @@ fn slot_worker(host: &dyn Host, layer: u8, slot: u8, events: mpsc::Receiver<bool
             Mode::Toggle => {
                 let steps = if toggled { item.alt.clone() } else { resolve(&item) };
                 toggled = !toggled;
+                let mut set = TOGGLED.lock().unwrap();
+                if toggled { set.insert((layer, slot)); } else { set.remove(&(layer, slot)); }
+                drop(set);
                 run(&steps);
             }
             Mode::Hold => match events.recv_timeout(HOLD) {
@@ -236,7 +246,6 @@ fn run_step(host: &dyn Host, step: &Step, generation: u64) -> Result<String, Str
         Step::Obs { action, scene, source, amount, path } => host.obs().run_action(action, scene, source, *amount, path),
         Step::Removed => Ok(String::new()),
         Step::Voicemeeter { parameter, mode, value } => integrations::voicemeeter(parameter, mode, *value),
-        Step::Player { app, action } => audio::player(app, action),
     }
 }
 
@@ -373,7 +382,6 @@ pub fn describe(step: &Step) -> String {
         Step::Obs { .. } => "OBS".into(),
         Step::Removed => String::new(),
         Step::Voicemeeter { parameter, .. } => parameter.clone(),
-        Step::Player { .. } => "Player".into(),
     }
 }
 

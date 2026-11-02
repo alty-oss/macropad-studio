@@ -87,6 +87,17 @@ fn voicemeeter_api() -> Result<&'static Voicemeeter, String> {
         .map_err(Clone::clone)
 }
 
+// Valor atual de um parâmetro do Voicemeeter, para o estado dos botões (None se ele não estiver aberto).
+pub fn voicemeeter_value(parameter: &str) -> Option<f32> {
+    let api = voicemeeter_api().ok()?;
+    let name = CString::new(parameter.trim()).ok()?;
+    let mut value = 0f32;
+    unsafe {
+        (api.dirty)();
+        ((api.get)(name.as_ptr(), &mut value) == 0).then_some(value)
+    }
+}
+
 // Parâmetros como "Strip[0].Gain" ou "Bus[1].Mute". "add" soma ao valor atual; "toggle" alterna 0 e 1.
 pub fn voicemeeter(parameter: &str, mode: &str, value: f64) -> Result<String, String> {
     let api = voicemeeter_api()?;

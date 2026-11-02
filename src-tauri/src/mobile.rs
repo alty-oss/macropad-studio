@@ -140,12 +140,15 @@ impl Control {
         }
     }
 
-    fn register_session(&mut self, tx: mpsc::Sender<String>) -> Result<u64, &'static str> {
-        if self.connected { return Err("Já existe uma conexão ativa. Feche a outra aba e aguarde alguns segundos."); }
+    // Uma conexão nova substitui a anterior. O celular costuma voltar do segundo plano com a conexão
+    // antiga ainda "aberta" aqui (o sistema a suspendeu sem fechar); recusar a nova deixava a página
+    // sem atualizações até o tempo limite. Devolve as teclas que a sessão antiga segurava.
+    fn register_session(&mut self, tx: mpsc::Sender<String>) -> (u64, HashSet<(u8, u8)>) {
+        let pressed = if self.connected { std::mem::take(&mut self.pressed) } else { HashSet::new() };
         self.session = self.session.wrapping_add(1);
         self.connected = true;
         self.tx = Some(tx);
-        Ok(self.session)
+        (self.session, pressed)
     }
 }
 
@@ -158,6 +161,8 @@ pub struct MobileServer {
     snapshot: Mutex<MobileSnapshot>,
     // Imagens dos botões por (pasta, slot), já decodificadas.
     images: Mutex<HashMap<(u8, u8), Image>>,
+    // Últimos estados dos botões enviados ao celular (states.rs).
+    states: Mutex<serde_json::Value>,
 }
 
 impl MobileServer {
@@ -167,6 +172,7 @@ impl MobileServer {
             control: Mutex::new(Control::new()),
             snapshot: Mutex::new(MobileSnapshot { detected_layer: None, device_present: false, physical: Vec::new(), mobile: mobile_slots(&[], 0), folders: Vec::new() }),
             images: Mutex::new(HashMap::new()),
+            states: Mutex::new(json!({})),
         })
     }
 
@@ -205,6 +211,8 @@ impl MobileServer {
         let server = Arc::clone(self);
         let thread_stop = Arc::clone(&stop);
         let handle = thread::spawn(move || run_listener(server, listener, thread_stop));
+        let (watcher, watcher_stop) = (Arc::clone(self), Arc::clone(&stop));
+        thread::spawn(move || watch_states(watcher, watcher_stop));
         let mut control = self.control.lock().unwrap();
         control.enabled = true;
         control.running = true;
@@ -231,7 +239,7 @@ impl MobileServer {
         if let Some(thread) = thread { let _ = thread.join(); }
     }
 
-    // Derruba a conexão atual; o celular volta a se conectar sozinho, se ainda estiver aberto.
+    // Derruba a conexão atual. O celular mostra "Toque para reconectar" em vez de voltar sozinho.
     pub fn disconnect(&self) {
         let mut control = self.control.lock().unwrap();
         control.session = control.session.wrapping_add(1);
@@ -290,7 +298,8 @@ impl MobileServer {
 
     fn snapshot_message(&self) -> String {
         let snapshot = self.snapshot.lock().unwrap().clone();
-        serde_json::to_string(&json!({ "type": "state", "state": snapshot })).unwrap_or_default()
+        let states = self.states.lock().unwrap().clone();
+        serde_json::to_string(&json!({ "type": "state", "state": snapshot, "states": states })).unwrap_or_default()
     }
 
     pub fn broadcast_state(&self) { self.broadcast(self.snapshot_message()); }
@@ -313,8 +322,10 @@ impl MobileServer {
         crate::append_log(&state.log_path, &format!("Conexão mobile: {detail}"));
     }
 
-    fn register_session(&self, tx: mpsc::Sender<String>) -> Result<u64, &'static str> {
-        self.control.lock().unwrap().register_session(tx)
+    fn register_session(&self, tx: mpsc::Sender<String>) -> u64 {
+        let (session, pressed) = self.control.lock().unwrap().register_session(tx);
+        self.release_pressed(pressed);
+        session
     }
 
     fn session_current(&self, id: u64) -> bool {
@@ -387,6 +398,31 @@ impl MobileServer {
             self.control.lock().unwrap().pressed.remove(&key);
         }
         Ok(())
+    }
+}
+
+// Recalcula o estado dos botões enquanto há um celular conectado e envia só quando algo muda.
+fn watch_states(server: Arc<MobileServer>, stop: Arc<std::sync::atomic::AtomicBool>) {
+    crate::executor::init_thread();
+    let mut last: Option<serde_json::Value> = None;
+    while !stop.load(std::sync::atomic::Ordering::SeqCst) {
+        if server.control.lock().unwrap().connected {
+            let current = {
+                let state = server.app.state::<crate::AppState>();
+                let obs = state.obs.status();
+                let config = state.config.lock().unwrap();
+                crate::states::compute(&config, &obs, crate::executor::toggled, &mut crate::states::SystemProbe::default())
+            };
+            let value = serde_json::to_value(&current).unwrap_or_else(|_| json!({}));
+            if last.as_ref() != Some(&value) {
+                *server.states.lock().unwrap() = value.clone();
+                server.broadcast(json!({ "type": "states", "states": value }).to_string());
+                last = Some(value);
+            }
+        } else {
+            last = None;
+        }
+        thread::sleep(Duration::from_millis(400));
     }
 }
 
@@ -492,13 +528,7 @@ fn handle_websocket(server: Arc<MobileServer>, stream: TcpStream, stop: Arc<std:
     };
     if !path.lock().unwrap().starts_with("/ws") { return; }
     let (events, queue) = mpsc::channel();
-    let session = match server.register_session(events) {
-        Ok(session) => session,
-        Err(error) => {
-            let _ = socket.send(Message::Text(json!({ "type": "error", "message": error }).to_string()));
-            return;
-        }
-    };
+    let session = server.register_session(events);
     if let Err(error) = socket.send(Message::Text(server.snapshot_message())) {
         server.log_connection(&format!("envio do estado inicial: {error}"));
         server.session_closed(session);
@@ -535,6 +565,8 @@ fn handle_websocket(server: Arc<MobileServer>, stream: TcpStream, stop: Arc<std:
                     }
                 }
                 Ok(ClientMessage::Ping) => { let _ = socket.send(Message::Text(json!({ "type": "pong" }).to_string())); }
+                // O celular voltou do segundo plano e pede o estado atual.
+                Ok(ClientMessage::Sync) => { let _ = socket.send(Message::Text(server.snapshot_message())); }
                 Err(_) => { let _ = socket.send(Message::Text(json!({ "type": "error", "message": "Mensagem inválida." }).to_string())); }
             },
             Ok(Message::Ping(payload)) => { let _ = socket.send(Message::Pong(payload)); }
@@ -543,6 +575,13 @@ fn handle_websocket(server: Arc<MobileServer>, stream: TcpStream, stop: Arc<std:
             Err(error) => { server.log_connection(&format!("leitura WebSocket: {error}")); break; }
             _ => {}
         }
+    }
+    // Outro aparelho conectou (ou o computador desconectou este): avisa para a página não tentar
+    // voltar sozinha, o que faria dois celulares se derrubarem sem parar.
+    if !stop.load(std::sync::atomic::Ordering::SeqCst) && !server.session_current(session) {
+        let _ = socket.send(Message::Text(json!({ "type": "replaced" }).to_string()));
+        let _ = socket.close(None);
+        let _ = socket.flush();
     }
     server.session_closed(session);
 }
@@ -560,6 +599,7 @@ enum ClientMessage {
         down: bool,
     },
     Ping,
+    Sync,
 }
 
 // "/image/<pasta>/<slot>" → (pasta, slot).
@@ -648,43 +688,7 @@ fn mobile_slots(buttons: &[MobileButton], page: u8) -> Vec<MobileSlot> {
 fn auto_icon(button: &MobileButton) -> &'static str {
     if button.folder != 0 { return "folder"; }
     if button.multi && button.steps.len() > 1 { return "multi"; }
-    let Some(step) = button.steps.first() else { return "" };
-    match step {
-        Step::Obs { action, .. } => match action.as_str() {
-            "mute" => "mic",
-            "visibility" => "eye",
-            "record" | "recordStart" | "recordStop" | "recordPause" => "record",
-            "stream" | "streamStart" | "streamStop" => "broadcast",
-            "replay" => "replay",
-            "screenshot" => "image",
-            _ => "obs",
-        },
-        Step::Audio { target, action, .. } => match action.as_str() {
-            "up" => "volumeUp",
-            "down" => "volumeDown",
-            _ if target == "mic" => "mic",
-            _ => "mute",
-        },
-        Step::Mouse { action, .. } => if action.starts_with("scroll") { "arrowDown" } else { "mouse" },
-        Step::Brightness { .. } => "sun",
-        _ => match serde_json::to_value(step).ok().and_then(|value| value.get("type")?.as_str().map(str::to_owned)).as_deref() {
-            Some("open") => "folder",
-            Some("website") => "globe",
-            Some("text") => "text",
-            Some("hotkey") => "keyboard",
-            Some("delay") => "clock",
-            Some("media") | Some("player") => "playPause",
-            Some("command") => "terminal",
-            Some("http") => "link",
-            Some("window") => "window",
-            Some("system") => "power",
-            Some("mouse") => "mouse",
-            Some("sound") => "music",
-            Some("counter") => "hash",
-            Some("voicemeeter") => "mixer",
-            _ => "bolt",
-        },
-    }
+    button.steps.first().map_or("", crate::states::step_icon)
 }
 
 #[cfg(test)]
@@ -815,14 +819,25 @@ mod tests {
     }
 
     #[test]
-    fn segunda_conexao_nao_expulsa_sessao_ativa() {
+    fn conexao_nova_substitui_a_anterior_e_solta_as_teclas() {
         let mut control = Control::new();
         let (first, _) = mpsc::channel();
-        let session = control.register_session(first).unwrap();
+        let (session, released) = control.register_session(first);
+        assert!(released.is_empty());
+        control.pressed.insert((0, 3));
         let (second, _) = mpsc::channel();
-        assert!(control.register_session(second).is_err());
-        assert!(control.connected);
-        assert_eq!(control.session, session);
-        assert!(control.tx.is_some());
+        let (next, released) = control.register_session(second);
+        assert_ne!(next, session);
+        assert_eq!(released, HashSet::from([(0, 3)]));
+        assert!(control.connected && control.pressed.is_empty());
+    }
+
+    #[test]
+    fn imagem_trocada_muda_o_endereco_no_celular() {
+        let png = |pixel: &str| format!("data:image/png;base64,{pixel}");
+        let button = |image: String| MobileButton { slot: 1, folder: 0, text: String::new(), icon: String::new(), color: String::new(), image, fit: "icon".into(), multi: false, steps: vec![Step::Delay { ms: 1 }], mode: Mode::Normal, alt: Vec::new(), profiles: Vec::new() };
+        let first = mobile_slots(&[button(png("AAAA"))], 0);
+        let second = mobile_slots(&[button(png("BBBB"))], 0);
+        assert_ne!(first[0].image, second[0].image);
     }
 }

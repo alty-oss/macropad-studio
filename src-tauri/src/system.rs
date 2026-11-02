@@ -266,6 +266,11 @@ fn registry_dword(name: &str) -> Option<u32> {
     (status == 0).then_some(data)
 }
 
+// Tema claro nos aplicativos do Windows.
+pub fn light_theme() -> bool {
+    registry_dword("AppsUseLightTheme").unwrap_or(1) != 0
+}
+
 fn toggle_theme() -> Result<String, String> {
     let light = registry_dword("AppsUseLightTheme").unwrap_or(0) == 0;
     let key = wide(PERSONALIZE);
@@ -412,6 +417,11 @@ pub fn sound(path: &str) -> Result<(), String> {
         Ok(Err(error)) => Err(format!("Não foi possível tocar {path}: {error}")),
         _ => Ok(()),
     }
+}
+
+// Número guardado no arquivo de um contador (0 quando ainda não existe).
+pub fn counter_value(path: &str) -> i64 {
+    fs::read_to_string(Path::new(path.trim())).ok().and_then(|text| text.trim().parse().ok()).unwrap_or(0)
 }
 
 // Soma ao número guardado num arquivo de texto (0 zera), por exemplo para uma fonte de texto do OBS.

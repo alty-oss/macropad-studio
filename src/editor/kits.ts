@@ -74,7 +74,7 @@ const kits: Kit[] = [
     ]
   },
   {
-    name: 'Mídia', app: true, description: 'Player, volume do sistema e do Spotify nos knobs, microfone e sons.',
+    name: 'Mídia', app: true, description: 'Teclas de mídia, volume do sistema e do Spotify nos knobs, microfone e sons.',
     controls: [
       [1, media(MEDIA.prev)], [2, media(MEDIA.playPause)], [3, media(MEDIA.next)], [4, app(audio('mic', 'toggle'))],
       [5, app({ type: 'open', path: 'spotify:', args: '', focus: false })],

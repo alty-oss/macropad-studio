@@ -1,6 +1,6 @@
 // Áudio do Windows: mudo e volume do microfone e da saída padrão (Core Audio), volume por
-// programa (sessões de áudio) e controle de players (SMTC). Cada função devolve um texto curto
-// para o OSD, como "Microfone mudo" ou "Spotify · 40%".
+// programa (sessões de áudio) e se há mídia tocando (SMTC), para o estado da tecla tocar/pausar.
+// Cada função devolve um texto curto para o OSD, como "Microfone mudo" ou "Spotify · 40%".
 use crate::system::process_name;
 use windows::{
     core::{Interface, GUID},
@@ -98,6 +98,42 @@ pub fn run(target: &str, app: &str, action: &str, amount: u8) -> Result<String, 
     }
 }
 
+// Mudo atual de um destino ("mic", "output" ou "app"), para o estado dos botões do celular. None
+// quando não dá para saber (sem dispositivo, programa sem som).
+pub fn muted_state(target: &str, app: &str) -> Option<bool> {
+    unsafe {
+        match target {
+            "mic" | "output" => {
+                let volume: IAudioEndpointVolume = default_device(if target == "mic" { eCapture } else { eRender }).ok()?.Activate(CLSCTX_ALL, None).ok()?;
+                volume.GetMute().ok().map(|mute| mute.as_bool())
+            }
+            "app" => {
+                let wanted = app.trim().to_lowercase();
+                let manager: IAudioSessionManager2 = default_device(eRender).ok()?.Activate(CLSCTX_ALL, None).ok()?;
+                let sessions = manager.GetSessionEnumerator().ok()?;
+                for index in 0..sessions.GetCount().ok()? {
+                    let Ok(control) = sessions.GetSession(index) else { continue };
+                    let Some(pid) = control.cast::<IAudioSessionControl2>().ok().and_then(|control| control.GetProcessId().ok()) else { continue };
+                    if process_name(pid).is_some_and(|name| name == wanted) {
+                        let volume: ISimpleAudioVolume = control.cast().ok()?;
+                        return volume.GetMute().ok().map(|mute| mute.as_bool());
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+}
+
+// Se o player atual (ou o que contém "app" no nome) está tocando.
+pub fn playing(app: &str) -> Option<bool> {
+    use windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackStatus as Status;
+    let session = session(app).ok()??;
+    let status = session.GetPlaybackInfo().ok()?.PlaybackStatus().ok()?;
+    Some(status == Status::Playing)
+}
+
 fn session(app: &str) -> windows::core::Result<Option<Session>> {
     let manager = Manager::RequestAsync()?.get()?;
     let wanted = app.trim().to_lowercase();
@@ -110,28 +146,6 @@ fn session(app: &str) -> windows::core::Result<Option<Session>> {
         }
     }
     Ok(None)
-}
-
-// Controla um player pelo SMTC: o atual, ou o primeiro cujo nome contém "app" (spotify, chrome…).
-pub fn player(app: &str, action: &str) -> Result<String, String> {
-    let session = session(app).map_err(text)?.ok_or_else(|| {
-        if app.trim().is_empty() { "Nenhum player ativo.".to_string() } else { format!("{app} não está tocando nada.") }
-    })?;
-    let done = match action {
-        "playPause" => session.TryTogglePlayPauseAsync(),
-        "next" => session.TrySkipNextAsync(),
-        "prev" => session.TrySkipPreviousAsync(),
-        "stop" => session.TryStopAsync(),
-        _ => return Err(format!("Ação de player desconhecida: {action}.")),
-    }
-    .and_then(|operation| operation.get())
-    .map_err(text)?;
-    if !done {
-        return Err("O player recusou o comando.".into());
-    }
-    // "Tocando agora" para o OSD, quando o player informa.
-    let title = session.TryGetMediaPropertiesAsync().and_then(|operation| operation.get()).and_then(|props| props.Title());
-    Ok(title.map(|title| title.to_string()).ok().filter(|title| !title.is_empty()).unwrap_or_else(|| "Player".into()))
 }
 
 #[cfg(test)]
